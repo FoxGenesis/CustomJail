@@ -1,7 +1,9 @@
 
 .settings/
 target/
-logs/
-plugins/
-config/
+/logs/
+/config/
+/test/
 .pid
+token.txt
+test-deploy-token.txt
