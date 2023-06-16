@@ -1,10 +1,16 @@
-/**
- * @author 
- *
- * @provides net.foxgenesis.watame.plugin.Plugin
- */
-module pluginTemplate {
-	requires watamebot;
+module watamebot.customjail {
+	exports net.foxgenesis.customjail;
+	exports net.foxgenesis.customjail.timer;
+	exports net.foxgenesis.customjail.time;
 
-	provides net.foxgenesis.watame.plugin.Plugin with my.plugin.PluginTemplate;
+	requires java.desktop;
+	requires jsr305;
+	requires net.dv8tion.jda;
+	requires org.apache.commons.lang3;
+	requires org.slf4j;
+	requires quartz;
+	requires transitive watamebot;
+	requires com.zaxxer.hikari;
+
+	provides net.foxgenesis.watame.plugin.Plugin with net.foxgenesis.customjail.CustomJailPlugin;
 }
