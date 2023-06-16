@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
-	<name>PluginTemplate</name>
+	<name>CustomJail</name>
 	<comment></comment>
 	<projects>
 		<project>Watamebot</project>
@@ -23,7 +23,7 @@
 	</natures>
 	<filteredResources>
 		<filter>
-			<id>1679962002713</id>
+			<id>0</id>
 			<name></name>
 			<type>6</type>
 			<matcher>
@@ -41,7 +41,7 @@
 			</matcher>
 		</filter>
 		<filter>
-			<id>1679962002715</id>
+			<id>0</id>
 			<name></name>
 			<type>10</type>
 			<matcher>
