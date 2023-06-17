@@ -92,7 +92,7 @@ public class UserWarningHandler extends ListenerAdapter {
 
 				if (caseID <= 0)
 					hook.editOriginal("Invalid Case-ID").queue();
-				else if (newReason == null || newReason.isEmpty())
+				else if (newReason == null || newReason.isBlank())
 					hook.editOriginal("Please specify a new reason").queue();
 				else if (database.updateWarningReason(guild, caseID, newReason))
 					modlog(hook.editOriginal("Updated Warning"), guild,
