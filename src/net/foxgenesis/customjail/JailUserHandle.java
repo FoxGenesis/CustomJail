@@ -51,7 +51,7 @@ public class JailUserHandle extends ListenerAdapter {
 			case "Jail User" -> {
 				Member member = event.getTargetMember();
 				if (jailer.isJailed(member))
-					event.replyEmbeds(Response.error("User is already jailed!")).queue();
+					event.replyEmbeds(Response.error("User is already jailed!")).setEphemeral(true).queue();
 				else
 					event.replyEmbeds(new JailEmbed(null).setMember(member).build()).addActionRow(timeMenu)
 							.addActionRow(reasonButton, addWarningOn, submitButton.asDisabled()).setEphemeral(true)

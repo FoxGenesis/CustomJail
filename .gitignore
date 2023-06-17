@@ -3,6 +3,7 @@
 target/
 /logs/
 /config/
+/test/
 .pid
 token.txt
 test-deploy-token.txt
