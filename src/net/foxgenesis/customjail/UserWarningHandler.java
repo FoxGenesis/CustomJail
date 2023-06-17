@@ -95,14 +95,14 @@ public class UserWarningHandler extends ListenerAdapter {
 				else if (newReason == null || newReason.isEmpty())
 					hook.editOriginal("Please specify a new reason").queue();
 				else if (database.updateWarningReason(guild, caseID, newReason))
-					modlog(hook.editOriginal("Removed Warning"), guild,
+					modlog(hook.editOriginal("Updated Warning"), guild,
 							() -> new EmbedBuilder().setColor(Constants.Colors.WARNING_DARK).setTitle("Warning Removed")
 									.addField("case-id", caseID + "", true)
 									.addField("Moderator", hook.getInteraction().getMember().getAsMention(), true)
 									.addField("Reason", reason, false).setTimestamp(Instant.now()).build())
 							.queue();
 				else
-					hook.editOriginal("Failed to remove warning").queue();
+					hook.editOriginal("Failed to update warning").queue();
 			}
 		}
 	}
