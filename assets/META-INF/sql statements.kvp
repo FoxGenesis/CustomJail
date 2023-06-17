@@ -13,10 +13,10 @@ get_warnings_page_for_member = SELECT w.`case_id`, w.`date`, w.`moderator`, w.`r
 get_warning_count_for_member = SELECT COUNT(`case_id`) as 'total' FROM `WatameBot`.`Warnings` WHERE `guild_id` = ? AND `member_id` = ?;
 
 ### (guild_id, case_id)
-delete_warning = DELETE FROM `Warnings` w WHERE w.`guild_id` = ? AND w.`case_id` = ?;
+delete_warning = DELETE FROM `Warnings` WHERE `Warnings`.`guild_id` = ? AND `Warnings`.`case_id` = ?;
 
 ### (guild_id, member_id)
-delete_all_warnings = DELETE FROM `Warnings` w WHERE w.`guild_id` = ? AND w.`member_id` = ?;
+delete_all_warnings = DELETE FROM `Warnings` WHERE `Warnings`.`guild_id` = ? AND Warnings`.`member_id` = ?;
 
 ### (reason, guild_id, case_id)
 update_warning_reason = UPDATE `Warnings` w SET w.`reason`= ? WHERE  w.`guild_id` = ? AND w.`case_id` = ?;
