@@ -96,7 +96,7 @@ public class UserWarningHandler extends ListenerAdapter {
 					hook.editOriginal("Please specify a new reason").queue();
 				else if (database.updateWarningReason(guild, caseID, newReason))
 					modlog(hook.editOriginal("Updated Warning"), guild,
-							() -> new EmbedBuilder().setColor(Constants.Colors.WARNING_DARK).setTitle("Warning Removed")
+							() -> new EmbedBuilder().setColor(Constants.Colors.WARNING_DARK).setTitle("Warning Updated")
 									.addField("case-id", caseID + "", true)
 									.addField("Moderator", hook.getInteraction().getMember().getAsMention(), true)
 									.addField("Reason", reason, false).setTimestamp(Instant.now()).build())
