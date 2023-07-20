@@ -3,10 +3,8 @@ package net.foxgenesis.customjail.embed;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.FormatStyle;
-import java.util.Optional;
 import java.util.function.Supplier;
 
-import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.MessageEmbed;
 import net.dv8tion.jda.api.entities.MessageEmbed.Field;
@@ -16,8 +14,14 @@ import net.foxgenesis.util.StringUtils;
 public class WarningsEmbed extends ACustomEmbed {
 
 	private static final DateTimeFormatter formatter = DateTimeFormatter
-			.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT).withZone(ZoneId.systemDefault());
-	private static final String WARNING_FORMAT = "* [WARN] %s - %s %s\n[Case ID: %d]\n\n";
+			.ofLocalizedDateTime(FormatStyle.SHORT, FormatStyle.SHORT).withZone(ZoneId.systemDefault());
+	// private static final String WARNING_FORMAT = "* %s - %s %s\n[Case ID:
+	// %d]\n\n";
+
+	// caseId, formatter.format(time), moderator, reason, active
+	// private static final String WARNING_FORMAT = "* [%d] *%s* %s - %s \n\n";
+
+	private static final String WARNING_FORMAT = "* %caseid% %s| %moderator% at `%date%`\n> *%reason%*\n";
 
 	private final int maxPages;
 	private int page = 1;
@@ -51,10 +55,6 @@ public class WarningsEmbed extends ACustomEmbed {
 		return maxPages;
 	}
 
-	public Optional<Member> getMember(Guild guild) {
-		return getField("User ID").map(Field::getValue).map(guild::getMemberById);
-	}
-
 	public WarningsEmbed setPageNumber(int page) {
 		this.page = page;
 		return this;
@@ -63,8 +63,7 @@ public class WarningsEmbed extends ACustomEmbed {
 	public WarningsEmbed setUser(Member member) {
 		builder.setAuthor(member.getEffectiveName(), null, member.getEffectiveAvatarUrl()).setColor(member.getColor());
 		replaceField(new Field("User", member.getAsMention(), true));
-		replaceField(new Field("User ID", member.getId(), true));
-		//addBlank();
+		// addBlank();
 		return this;
 	}
 
@@ -73,23 +72,15 @@ public class WarningsEmbed extends ACustomEmbed {
 		return this;
 	}
 
-	public WarningsEmbed setGuildlineWarningCount(int count) {
-		replaceField(new Field("Community Guideline Warnings", "" + count, true, true));
-		return this;
-	}
-
 	public WarningsEmbed setWarnings(Warning... warnings) {
 		StringBuilder builder = new StringBuilder();
-		builder.append("```\n");
-
 		if (warnings.length > 0) {
 			for (int i = 0; i < warnings.length; i++)
-				builder.append(warnings[i].toFormattedString(WARNING_FORMAT, formatter));
+				builder.append(warnings[i].toExternalFormat(WARNING_FORMAT, formatter)
+						.formatted(warnings[i].active() ? "**[Active]** " : "") + "\n");
 		} else {
 			builder.append("No Warnings");
 		}
-
-		builder.append("```");
 		replaceField(new Field("Warnings", StringUtils.limit(builder.toString(), MessageEmbed.VALUE_MAX_LENGTH), false,
 				true));
 		return this;
