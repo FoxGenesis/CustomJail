@@ -139,6 +139,7 @@ public class JailSystem implements Closeable, IJailSystem {
 		// Add warning in database if needed
 		Optional<Integer> caseid = addWarning
 				? Optional.ofNullable(addWarningForMember(member, moderator, Optional.ofNullable(reason), true, true))
+						.filter(id -> id != -1)
 				: Optional.empty();
 
 		// Assert that a warning was added to the database if needed
@@ -189,7 +190,8 @@ public class JailSystem implements Closeable, IJailSystem {
 		jailEmbedBuilder.setFooter(EMBED_FOOTER, CustomJailPlugin.EMBED_FOOTER_ICON);
 
 		// Create jail embed request
-		MessageCreateAction jailEmbed = timeoutChannel.sendMessage("test").addEmbeds(jailEmbedBuilder.build())
+		MessageCreateAction jailEmbed = timeoutChannel.sendMessage(member.getAsMention())
+				.addEmbeds(jailEmbedBuilder.build())
 				.addActionRow(Button.primary(Utilities.Interactions.wrapInteraction("startjail", member), "Accept"));
 
 		// Modify roles and send jail embed
