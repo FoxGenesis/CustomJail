@@ -43,6 +43,7 @@ import net.foxgenesis.customjail.jail.IJailSystem;
 import net.foxgenesis.customjail.jail.InternalException;
 import net.foxgenesis.customjail.jail.JailDetails;
 import net.foxgenesis.customjail.time.CustomTime;
+import net.foxgenesis.customjail.time.UnixTimestamp;
 import net.foxgenesis.customjail.util.Response;
 import net.foxgenesis.customjail.util.Utilities;
 import net.foxgenesis.watame.util.Colors;
@@ -50,6 +51,7 @@ import net.foxgenesis.watame.util.Colors;
 public class JailFrontend extends ListenerAdapter {
 
 	private static final int WARNINGS_PER_PAGE = 5;
+	private static final String NA = "N/A";
 
 	// ========================================================================================
 
@@ -84,18 +86,14 @@ public class JailFrontend extends ListenerAdapter {
 					WarningsEmbed embed = createWarningsEmbedForMember(null, member, 1);
 					int page = embed.getPage();
 
-					Set<ItemComponent> components = new HashSet<>();
-
-					// Check if we can advance a page
-					if (page + 1 <= embed.getMaxPage())
-						components.add(Button.primary(wrapInteraction("warnings", member, "" + (page + 1)), "Next"));
-
 					// Build response
-					WebhookMessageEditAction<Message> a = event.getHook().editOriginalEmbeds(embed.build())
-							.setReplace(true);
-					if (!components.isEmpty())
-						a.setActionRow(components);
-					a.queue();
+					event.getHook().editOriginalEmbeds(embed.build()).setReplace(true)
+							.setActionRow(
+									Button.primary(wrapInteraction("warnings", member, "" + (page - 1)), "\u25C0")
+											.withDisabled(page - 1 <= 0),
+									Button.primary(wrapInteraction("warnings", member, "" + (page + 1)), "\u25B6")
+											.withDisabled(page + 1 > embed.getMaxPage()))
+							.queue();
 				});
 			}
 
@@ -170,11 +168,17 @@ public class JailFrontend extends ListenerAdapter {
 						builder.addField("Member", member.getAsMention(), true);
 						builder.addField("Moderator", Optional.ofNullable(details.moderator()).map(Member::getAsMention)
 								.orElse("Deleted User"), true);
-						builder.addField("Case ID", details.caseid() == -1 ? "N/A" : "" + details.caseid(), true);
+						builder.addField("Case ID", details.caseid() == -1 ? NA : "" + details.caseid(), true);
 
 						// Row 2
-						builder.addField("Duration", details.duration().getDisplayString(), true);
 						builder.addField("Accepted", isTimerRunning ? "Yes" : "No", true);
+						builder.addField("Duration", details.duration().getDisplayString(), true);
+						builder.addField("Time Left",
+								isTimerRunning
+										? jail.getJailEndTimestamp(member)
+												.map(UnixTimestamp::getRelativeTimeStringInSeconds).orElse(NA)
+										: "Not Yet Accepted",
+								true);
 
 						// Row 3
 						builder.addField("Reason", details.reason(), false);
@@ -184,12 +188,9 @@ public class JailFrontend extends ListenerAdapter {
 						builder.setTimestamp(Instant.ofEpochMilli(details.timestamp()));
 
 						// Buttons
-						ActionRow interactions = ActionRow.of(
-								Button.primary(wrapInteraction("checktime", member), "Check Time")
-										.withDisabled(!isTimerRunning),
-								Button.danger(wrapInteraction("forcestart", member), "Force Start").withDisabled(
-										isTimerRunning),
-								Button.danger(wrapInteraction("unjail", member), "Unjail"));
+						ActionRow interactions = ActionRow
+								.of(Button.danger(wrapInteraction("forcestart", member), "Force Start").withDisabled(
+										isTimerRunning), Button.danger(wrapInteraction("unjail", member), "Unjail"));
 
 						return event.getHook().editOriginalEmbeds(builder.build()).setComponents(interactions);
 					}).orElse(event.getHook()
@@ -327,7 +328,9 @@ public class JailFrontend extends ListenerAdapter {
 				Optional<String> reason = Optional.ofNullable(event.getOption("reason", OptionMapping::getAsString));
 
 				jail.startJailTimer(member, moderator, reason,
-						timeLeft -> hook.editOriginalEmbeds(Response.success(timeLeft)), err -> error(hook, err));
+						timeLeft -> hook.editOriginalEmbeds(
+								Response.success("**Time Remaining:** " + timeLeft.getRelativeTimeStringInSeconds())),
+						err -> error(hook, err));
 			}
 		}
 	}
@@ -344,15 +347,6 @@ public class JailFrontend extends ListenerAdapter {
 
 			unwrappedMember.ifPresentOrElse(member -> {
 				switch (id) {
-					case "checktime" -> {
-						event.deferReply(true).queue();
-						if (jail.isJailTimerRunning(member))
-							hook.editOriginalEmbeds(Response.info(member.getAsMention() + " has `"
-									+ Utilities.prettyPrintDuration(jail.getRemainingJailTime(member)) + "` left."))
-									.queue();
-						else
-							hook.editOriginalEmbeds(Response.notice("User has not accepted their jail yet.")).queue();
-					}
 					case "forcestart" -> {
 						if (jail.isJailTimerRunning(member)) {
 							hook.editOriginalEmbeds(Response.error("Timer is already running")).queue();
@@ -396,7 +390,9 @@ public class JailFrontend extends ListenerAdapter {
 										.queue();
 
 							// Display time left
-							hook.editOriginalEmbeds(Response.success(timeLeft)).queue();
+							hook.editOriginalEmbeds(Response
+									.success("**Time Remaining:** " + timeLeft.getRelativeTimeStringInSeconds()))
+									.queue();
 						}, err -> error(hook, err));
 					}
 
@@ -430,14 +426,12 @@ public class JailFrontend extends ListenerAdapter {
 						Set<ItemComponent> components = new HashSet<>();
 
 						// Check if we can go back a page
-						if (page - 1 > 0)
-							components.add(
-									Button.primary(wrapInteraction("warnings", member, "" + (page - 1)), "Previous"));
+						components.add(Button.primary(wrapInteraction("warnings", member, "" + (page - 1)), "\u25C0")
+								.withDisabled(page - 1 <= 0));
 
 						// Check if we can advance a page
-						if (page + 1 <= embed.getMaxPage())
-							components
-									.add(Button.primary(wrapInteraction("warnings", member, "" + (page + 1)), "Next"));
+						components.add(Button.primary(wrapInteraction("warnings", member, "" + (page + 1)), "\u25B6")
+								.withDisabled(page + 1 > embed.getMaxPage()));
 
 						// Build response
 						WebhookMessageEditAction<Message> a = event.getHook().editOriginalEmbeds(embed.build())
@@ -527,8 +521,9 @@ public class JailFrontend extends ListenerAdapter {
 							case "forcestart" -> {
 								event.deferReply(true).queue();
 								jail.startJailTimer(member, Optional.of(pressed), reason, timeLeft -> hook
-										.editOriginalEmbeds(Response.success(timeLeft)).setReplace(true).queue(),
-										err -> error(hook, err));
+										.editOriginalEmbeds(Response.success(
+												"**Time Remaining:** " + timeLeft.getRelativeTimeStringInSeconds()))
+										.setReplace(true).queue(), err -> error(hook, err));
 							}
 							case "unjail" -> {
 								event.deferReply(true).queue();
@@ -577,8 +572,8 @@ public class JailFrontend extends ListenerAdapter {
 	private WarningsEmbed createWarningsEmbedForMember(@Nullable MessageEmbed embed, @NotNull Member member, int page) {
 		return new WarningsEmbed(embed,
 				() -> Utilities.calculateMaxPages(WARNINGS_PER_PAGE, jail.getTotalWarnings(member))).setUser(member)
-				.setWarningLevel(jail.getWarningLevelForMember(member)).setPageNumber(page)
-				.setWarnings(jail.getWarningsPageForMember(member, WARNINGS_PER_PAGE, page));
+				.setTotalWarning(jail.getTotalWarnings(member)).setWarningLevel(jail.getWarningLevelForMember(member))
+				.setPageNumber(page).setWarnings(jail.getWarningsPageForMember(member, WARNINGS_PER_PAGE, page));
 	}
 
 	private static void error(InteractionHook hook, InternalException err) {

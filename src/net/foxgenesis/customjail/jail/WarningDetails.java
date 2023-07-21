@@ -1,17 +1,16 @@
 package net.foxgenesis.customjail.jail;
 
-import java.time.temporal.TemporalAccessor;
 import java.util.Optional;
 
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.entities.Member;
 import net.foxgenesis.customjail.database.Warning;
 
-public record WarningDetails(Member member, Optional<Member> mod, Optional<String> reason, TemporalAccessor timestamp,
-		int caseID, boolean active) {
+public record WarningDetails(Member member, Optional<Member> mod, Optional<String> reason, long timestamp, int caseID,
+		boolean active) {
 
 	public static WarningDetails fromData(JDA jda, long guildID, long memberID, String reason, String moderator,
-			TemporalAccessor time, int caseID, boolean active) {
+			long time, int caseID, boolean active) {
 		return Optional.ofNullable(jda.getGuildById(guildID)).map(guild -> {
 			Member member = guild.getMemberById(memberID);
 			Member mod = guild.getMemberById(moderator);

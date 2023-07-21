@@ -8,6 +8,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -21,6 +22,7 @@ import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 
+import org.jetbrains.annotations.NotNull;
 import org.quartz.SchedulerException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -48,6 +50,7 @@ import net.foxgenesis.customjail.jail.event.impl.WarningRemovedEvent;
 import net.foxgenesis.customjail.jail.event.impl.WarningTimerFinishEvent;
 import net.foxgenesis.customjail.jail.event.impl.WarningTimerStartEvent;
 import net.foxgenesis.customjail.time.CustomTime;
+import net.foxgenesis.customjail.time.UnixTimestamp;
 import net.foxgenesis.customjail.timer.JailScheduler;
 import net.foxgenesis.customjail.util.Utilities;
 import net.foxgenesis.util.resource.ModuleResource;
@@ -159,7 +162,7 @@ public class JailSystem implements Closeable, IJailSystem {
 		// Update member warning roles if we added a warning otherwise get current
 		Set<Role> currentRoles = new HashSet<>(member.getRoles());
 		Set<Role> roles = caseid.isPresent()
-				? Utilities.Warnings.modifyWarningRoles(member, getWarningLevelForMember(member) + 1)
+				? Utilities.Warnings.modifyWarningRoles(member, getWarningLevelForMember(member))
 				: new HashSet<>(member.getRoles());
 
 		// Add the jail role
@@ -183,7 +186,7 @@ public class JailSystem implements Closeable, IJailSystem {
 		jailEmbedBuilder.addField("Reason", validReason, false);
 
 		jailEmbedBuilder.setTimestamp(Instant.now());
-		jailEmbedBuilder.setFooter(EMBED_FOOTER);
+		jailEmbedBuilder.setFooter(EMBED_FOOTER, CustomJailPlugin.EMBED_FOOTER_ICON);
 
 		// Create jail embed request
 		MessageCreateAction jailEmbed = timeoutChannel.sendMessage("test").addEmbeds(jailEmbedBuilder.build())
@@ -249,12 +252,12 @@ public class JailSystem implements Closeable, IJailSystem {
 				bus.fireEvent(new MemberUnjailEvent(member, moderator, reason));
 
 			// If warning level is higher than zero, start warning timer otherwise fail
-			if (getWarningLevelForMember(member) > 0
-					&& !scheduler.createWarningTimer(member, CustomJailPlugin.getWarningTime(guild)))
+			CustomTime time = CustomJailPlugin.getWarningTime(guild);
+			if (getWarningLevelForMember(member) > 0 && !scheduler.createWarningTimer(member, time))
 				handleError(err, InternalException::new, "Member unjailed but failed to start warning timer!", null);
 			else {
 				logger.info("Unjailed {}", member);
-				bus.fireEvent(new WarningTimerStartEvent(member, scheduler.getWarningEndDate(member)));
+				bus.fireEvent(new WarningTimerStartEvent(member, time.addTo(new Date())));
 				success.run();
 			}
 		}, e -> handleError(err, InternalException::new, "Timer removed but failed to remove jail role!", e));
@@ -262,7 +265,14 @@ public class JailSystem implements Closeable, IJailSystem {
 
 	@Override
 	public void startJailTimer(Member member, Optional<Member> moderator, Optional<String> reason,
-			Consumer<String> timeLeft, ErrorHandler<InternalException> err) {
+			Consumer<UnixTimestamp> timeLeft, ErrorHandler<InternalException> err) {
+
+		// Ensure member is jailed
+		if (!scheduler.isJailed(member)) {
+			handleError(err, InternalException::new, "Member is not jailed", null);
+			return;
+		}
+
 		// If timer not started, start it
 		if (!scheduler.isJailTimerRunning(member)) {
 
@@ -286,7 +296,7 @@ public class JailSystem implements Closeable, IJailSystem {
 		}
 
 		// Display time left
-		timeLeft.accept(Utilities.prettyPrintDuration(scheduler.getRemainingJailTime(member)));
+		timeLeft.accept(scheduler.getJailEndTimestamp(member).get());
 	}
 
 	@Override
@@ -450,6 +460,18 @@ public class JailSystem implements Closeable, IJailSystem {
 	@Override
 	public Optional<Duration> getRemainingJailTime(Member member) {
 		return scheduler.getRemainingJailTime(member);
+	}
+
+	@Override
+	@NotNull
+	public Optional<UnixTimestamp> getWarningEndTimestamp(@NotNull Member member) {
+		return scheduler.getWarningEndTimestamp(member);
+	}
+
+	@Override
+	@NotNull
+	public Optional<UnixTimestamp> getJailEndTimestamp(@NotNull Member member) {
+		return scheduler.getJailEndTimestamp(member);
 	}
 
 	@Override

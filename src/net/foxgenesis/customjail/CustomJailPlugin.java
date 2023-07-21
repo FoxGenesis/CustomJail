@@ -2,9 +2,6 @@ package net.foxgenesis.customjail;
 
 import java.io.IOException;
 import java.time.Instant;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
-import java.time.format.FormatStyle;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
@@ -72,12 +69,12 @@ import net.foxgenesis.watame.util.Colors;
 
 @PluginConfiguration(defaultFile = "/META-INF/configuration/jail.ini", identifier = "jail", outputFile = "jail.ini")
 public class CustomJailPlugin extends Plugin {
-	/**
-	 * Date format with medium date and short time
-	 */
-	public static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter
-			.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT).withZone(ZoneId.systemDefault());
 
+	/**
+	 * Icon to be used on all embed footers
+	 */
+	public static String EMBED_FOOTER_ICON = "https://icons-for-free.com/iconfiles/png/512/jail+justice+law+police+prison+security+icon-1320190820835732524.png";
+	
 	/**
 	 * Time selection for jailing
 	 */
@@ -287,7 +284,7 @@ public class CustomJailPlugin extends Plugin {
 					builder.addField("Reason", event.getReason().orElseGet(jail::getDefaultReason), false);
 
 					builder.setTimestamp(Instant.now());
-					builder.setFooter(jail.getEmbedFooter());
+					builder.setFooter(jail.getEmbedFooter(), EMBED_FOOTER_ICON);
 					return builder.build();
 				}).ifPresent(RestAction::queue);
 			}
@@ -310,7 +307,7 @@ public class CustomJailPlugin extends Plugin {
 					builder.addField("Reason", event.getReason().orElseGet(jail::getDefaultReason), false);
 
 					builder.setTimestamp(Instant.now());
-					builder.setFooter(jail.getEmbedFooter());
+					builder.setFooter(jail.getEmbedFooter(), EMBED_FOOTER_ICON);
 					return builder.build();
 				}).ifPresent(RestAction::queue);
 			}
@@ -335,7 +332,7 @@ public class CustomJailPlugin extends Plugin {
 						builder.addField("Reason", event.getReason().orElseGet(jail::getDefaultReason), false);
 
 						builder.setTimestamp(Instant.now());
-						builder.setFooter(jail.getEmbedFooter());
+						builder.setFooter(jail.getEmbedFooter(), EMBED_FOOTER_ICON);
 						return builder.build();
 					}).ifPresent(RestAction::queue);
 				});
@@ -360,7 +357,7 @@ public class CustomJailPlugin extends Plugin {
 						builder.addField("Reason", event.getStartReason().orElseGet(jail::getDefaultReason), false);
 
 						builder.setTimestamp(Instant.now());
-						builder.setFooter(jail.getEmbedFooter());
+						builder.setFooter(jail.getEmbedFooter(), EMBED_FOOTER_ICON);
 						return builder.build();
 					}).ifPresent(RestAction::queue);
 				});
@@ -382,7 +379,7 @@ public class CustomJailPlugin extends Plugin {
 						builder.addField("Reason", event.getReason().orElseGet(jail::getDefaultReason), false);
 
 						builder.setTimestamp(Instant.now());
-						builder.setFooter(jail.getEmbedFooter());
+						builder.setFooter(jail.getEmbedFooter(), EMBED_FOOTER_ICON);
 						return builder.build();
 					}).ifPresent(RestAction::queue);
 			}
@@ -408,7 +405,7 @@ public class CustomJailPlugin extends Plugin {
 					builder.addField("Reason for Update", event.getReason().orElseGet(jail::getDefaultReason), false);
 
 					builder.setTimestamp(Instant.now());
-					builder.setFooter(jail.getEmbedFooter());
+					builder.setFooter(jail.getEmbedFooter(), EMBED_FOOTER_ICON);
 					return builder.build();
 				}).ifPresent(RestAction::queue);
 			}
@@ -523,7 +520,7 @@ public class CustomJailPlugin extends Plugin {
 										.addOption(OptionType.STRING, "new-reason", "New warning reason", true)
 										.addOption(OptionType.STRING, "reason", "Reason for warning update")));
 	}
-	
+
 	public IJailSystem getJailSystem() {
 		return jail;
 	}

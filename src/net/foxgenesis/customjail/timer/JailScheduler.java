@@ -1,16 +1,12 @@
 package net.foxgenesis.customjail.timer;
 
 import java.time.Duration;
-import java.time.Instant;
-import java.time.temporal.ChronoUnit;
-import java.time.temporal.TemporalAmount;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Properties;
-import java.util.function.Consumer;
 
 import org.quartz.JobBuilder;
 import org.quartz.JobDetail;
@@ -26,15 +22,10 @@ import org.quartz.impl.StdSchedulerFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import net.dv8tion.jda.api.EmbedBuilder;
-import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Member;
-import net.dv8tion.jda.api.entities.Role;
-import net.foxgenesis.customjail.CustomJailPlugin;
-import net.foxgenesis.customjail.database.IWarningDatabase;
 import net.foxgenesis.customjail.jail.JailDetails;
 import net.foxgenesis.customjail.time.CustomTime;
-import net.foxgenesis.watame.util.Colors;
+import net.foxgenesis.customjail.time.UnixTimestamp;
 
 public class JailScheduler implements AutoCloseable, IJailScheduler {
 	private static final Logger logger = LoggerFactory.getLogger(JailScheduler.class);
@@ -108,6 +99,7 @@ public class JailScheduler implements AutoCloseable, IJailScheduler {
 		}
 	}
 
+	@Override
 	public Optional<JailDetails> getJailDetails(Member member) throws SchedulerException {
 		Objects.requireNonNull(member);
 		return isJailed(member) ? Optional.of(JailDetails.resolveFromDataMap(member.getJDA(),
@@ -187,6 +179,7 @@ public class JailScheduler implements AutoCloseable, IJailScheduler {
 		}
 	}
 
+	@Override
 	public boolean rescheduleWarningTimer(Member member, CustomTime time) {
 		logger.debug("Rescheduling warning timer for {}", member);
 		JobKey key = warningJob(member);
@@ -199,27 +192,6 @@ public class JailScheduler implements AutoCloseable, IJailScheduler {
 				return false;
 			}
 		}).orElseGet(() -> createWarningTimer(member, time));
-	}
-
-	@Override
-	public boolean resetWarningTimer(Member member) {
-		logger.debug("Resetting warning timer for {}", member.getEffectiveName());
-		JobKey key = warningJob(member);
-		return getTriggerForJob(key).map(trigger -> {
-			try {
-				scheduler.rescheduleJob(trigger.getKey(), resetTriggerTime(trigger));
-				return true;
-			} catch (SchedulerException e) {
-				logger.error("Failed to extend warning timer for" + key, e);
-				return false;
-			}
-		}).orElse(false);
-	}
-
-	@Override
-	public boolean updateWarningTimer(Member member, TemporalAmount newTime) {
-		// TODO implement method to update warning timer
-		throw new UnsupportedOperationException("Not yet implemented!");
 	}
 
 	@Override
@@ -245,34 +217,36 @@ public class JailScheduler implements AutoCloseable, IJailScheduler {
 		scheduler.shutdown(true);
 	}
 
-	// =================================================================================================================
+	@Override
+	public Date getJailEndDate(Member member) {
+		return getTriggerForJob(jailJob(member)).map(t -> t.getNextFireTime()).orElse(null);
+	}
 
 	@Override
-	public void unjail(Member member, Role timeoutRole, Member moderator, String reason,
-			IWarningDatabase database, Consumer<Member> success, Consumer<Throwable> err) {
-		Guild guild = member.getGuild();
+	public Date getWarningEndDate(Member member) {
+		return getTriggerForJob(warningJob(member)).map(t -> t.getNextFireTime()).orElse(null);
+	}
 
-		// Create moderation log embed
-		EmbedBuilder builder = new EmbedBuilder().setColor(Colors.SUCCESS).setTitle("Member Unjailed")
-				.setThumbnail(member.getEffectiveAvatarUrl()).addField("User", member.getAsMention(), true);
+	@Override
+	public Optional<UnixTimestamp> getWarningEndTimestamp(Member member) {
+		return getTriggerForJob(warningJob(member)).map(t -> t.getNextFireTime()).map(UnixTimestamp::fromDate);
+	}
 
-		if (moderator != null)
-			builder.addField("Moderator", moderator.getAsMention(), true);
+	@Override
+	public Optional<UnixTimestamp> getJailEndTimestamp(Member member) {
+		return getTriggerForJob(jailJob(member)).map(t -> t.getNextFireTime()).map(UnixTimestamp::fromDate);
+	}
 
-		builder.addField("Reason", reason != null ? reason : "Time is up", false).setTimestamp(Instant.now())
-				.setFooter("via Custom Jail").build();
-
-		// Un-jail and log to moderation log
-		CustomJailPlugin.modlog(guild.removeRoleFromMember(member, timeoutRole), guild, () -> builder.build())
-				.queue(v -> {
-					if (database.getWarningLevelForMember(member) > 0) {
-						createWarningTimer(member, CustomJailPlugin.getWarningTime(guild));
-					}
-					success.accept(member);
-				}, err);
+	@Override
+	public Optional<Duration> getRemainingJailTime(Member member) {
+		return getTriggerForJob(jailJob(member)).map(JailScheduler::getTimeLeft);
 	}
 
 	// =================================================================================================================
+
+	private static Duration getTimeLeft(Trigger trigger) {
+		return Duration.ofMillis(trigger.getStartTime().getTime() - System.currentTimeMillis());
+	}
 
 	private static JobKey jailJob(Member member) {
 		return JobKey.jobKey(member.getId(), "jail");
@@ -290,57 +264,5 @@ public class JailScheduler implements AutoCloseable, IJailScheduler {
 			logger.error("Failed to find jail trigger for " + key, e);
 			return Optional.empty();
 		}
-	}
-
-	public Date getJailEndDate(Member member) {
-		return getTriggerForJob(jailJob(member)).map(t -> t.getNextFireTime()).orElse(null);
-	}
-
-	public Date getWarningEndDate(Member member) {
-		return getTriggerForJob(warningJob(member)).map(t -> t.getNextFireTime()).orElse(null);
-	}
-
-	public Optional<Duration> getRemainingJailTime(Member member) {
-		return getTriggerForJob(jailJob(member)).map(JailScheduler::getTimeLeft);
-//		JobKey key = jailJob(member);
-//		return getTriggerForJob(jailJob(member)).map(JailScheduler::getTimeLeft).orElseGet(() -> {
-//			try {
-//				return Duration.of(scheduler.getJobDetail(key).getJobDataMap().getIntValue("duration"),
-//						ChronoUnit.SECONDS);
-//			} catch (SchedulerException e) {
-//				logger.error("Failed to get jail duration for " + key, e);
-//				return null;
-//			}
-//		});
-	}
-
-	public TemporalAmount getJailDuration(Member member) {
-		JobKey key = jailJob(member);
-		return getTriggerForJob(jailJob(member)).map(JailScheduler::getTriggerDuration).orElseGet(() -> {
-			try {
-				return Duration.of(scheduler.getJobDetail(key).getJobDataMap().getIntValue("duration"),
-						ChronoUnit.SECONDS);
-			} catch (SchedulerException e) {
-				logger.error("Failed to get jail duration for " + key, e);
-				return null;
-			}
-		});
-	}
-
-	private static Trigger resetTriggerTime(Trigger trigger) {
-		return trigger.getTriggerBuilder().startAt(Date.from(Instant.now().plus(getTriggerDuration(trigger)))).build();
-	}
-
-	private static Duration getTimeLeft(Trigger trigger) {
-		return Duration.ofMillis(trigger.getStartTime().getTime() - System.currentTimeMillis());
-	}
-
-	private static Duration getTriggerDuration(Trigger trigger) {
-		return Duration.ofMillis(trigger.getStartTime().getTime() - trigger.getJobDataMap().getLongValue("start-time"));
-	}
-
-	@SuppressWarnings("unused")
-	private static long temporalToMilli(TemporalAmount time) {
-		return time.getUnits().stream().map(time::get).map(t -> t * 1000).reduce((a, b) -> a + b).orElse(-1L);
 	}
 }

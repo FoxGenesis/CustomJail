@@ -14,6 +14,7 @@ import net.dv8tion.jda.api.entities.Member;
 import net.foxgenesis.customjail.database.Warning;
 import net.foxgenesis.customjail.jail.event.IJailEventBus;
 import net.foxgenesis.customjail.time.CustomTime;
+import net.foxgenesis.customjail.time.UnixTimestamp;
 
 public interface IJailSystem {
 
@@ -53,7 +54,7 @@ public interface IJailSystem {
 	 * @param err       - error handler if something went wrong
 	 */
 	void startJailTimer(@NotNull Member member, @NotNull Optional<Member> moderator, @NotNull Optional<String> reason,
-			@NotNull Consumer<String> timeLeft, @NotNull ErrorHandler<InternalException> err);
+			@NotNull Consumer<UnixTimestamp> timeLeft, @NotNull ErrorHandler<InternalException> err);
 
 	/**
 	 * Fire a {@link Member}'s warning timer.
@@ -101,6 +102,28 @@ public interface IJailSystem {
 	 */
 	@NotNull
 	Optional<Duration> getRemainingJailTime(@NotNull Member member);
+
+	/**
+	 * Check how much time is left on a {@link Member}'s warning timer.
+	 * 
+	 * @param member - member to check
+	 * 
+	 * @return Returns an {@link Optional} of {@link UnixTimestamp} for when the
+	 *         warning timer will fire.
+	 */
+	@NotNull
+	Optional<UnixTimestamp> getWarningEndTimestamp(@NotNull Member member);
+
+	/**
+	 * Check how much time is left on a {@link Member}'s punishment.
+	 * 
+	 * @param member - member to check
+	 * 
+	 * @return Returns an {@link Optional} of {@link UnixTimestamp} for when the
+	 *         jail timer will fire.
+	 */
+	@NotNull
+	Optional<UnixTimestamp> getJailEndTimestamp(@NotNull Member member);
 
 	/**
 	 * Get the details of a {@link Member}'s jailing.
