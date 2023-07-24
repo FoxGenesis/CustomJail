@@ -180,10 +180,13 @@ public class JailSystem implements Closeable, IJailSystem {
 
 		// Row 1
 		jailEmbedBuilder.addField("Member", member.getAsMention(), true);
+		jailEmbedBuilder.addField("Moderator", moderator.getAsMention(), true);
 		jailEmbedBuilder.addField("Case ID", caseid.map(Object::toString).orElse("N/A"), true);
-		jailEmbedBuilder.addField("Duration", prettyPrintDuration, true);
 
 		// Row 2
+		jailEmbedBuilder.addField("Duration", prettyPrintDuration, true);
+
+		// Row 3
 		jailEmbedBuilder.addField("Reason", validReason, false);
 
 		jailEmbedBuilder.setTimestamp(Instant.now());
