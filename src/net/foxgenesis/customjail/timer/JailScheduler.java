@@ -102,8 +102,11 @@ public class JailScheduler implements AutoCloseable, IJailScheduler {
 	@Override
 	public Optional<JailDetails> getJailDetails(Member member) throws SchedulerException {
 		Objects.requireNonNull(member);
-		return isJailed(member) ? Optional.of(JailDetails.resolveFromDataMap(member.getJDA(),
-				scheduler.getJobDetail(jailJob(member)).getJobDataMap())) : Optional.empty();
+		if (!isJailed(member))
+			return Optional.empty();
+
+		return Optional.ofNullable(scheduler.getJobDetail(jailJob(member))).map(JobDetail::getJobDataMap)
+				.map(map -> JailDetails.resolveFromDataMap(member.getJDA(), map));
 	}
 
 	@Override
