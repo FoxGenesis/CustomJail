@@ -274,8 +274,6 @@ public class JailFrontend extends ListenerAdapter {
 			// ========================================================================================
 
 			case "jail" -> {
-				event.deferReply(true).queue();
-
 				InteractionHook hook = event.getHook();
 				Member member = event.getOption("user", OptionMapping::getAsMember);
 				Member moderator = event.getMember();
@@ -301,6 +299,8 @@ public class JailFrontend extends ListenerAdapter {
 							.queue();
 					return;
 				}
+
+				event.deferReply(true).queue();
 
 				jail.jail(member, moderator, time, reason, addWarning,
 						details -> hook.editOriginalEmbeds(Response.success(
