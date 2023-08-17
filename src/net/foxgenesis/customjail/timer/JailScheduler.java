@@ -30,6 +30,8 @@ import net.dv8tion.jda.api.entities.Member;
 
 public class JailScheduler implements AutoCloseable, IJailScheduler {
 	private static final Logger logger = LoggerFactory.getLogger(JailScheduler.class);
+	private static final long MISFIRE_DELAY = 2;
+	private static final long MAX_DELAY = 3_600;
 
 	private final Scheduler scheduler;
 
@@ -57,6 +59,7 @@ public class JailScheduler implements AutoCloseable, IJailScheduler {
 		scheduler = schedulerFactory.getScheduler();
 		scheduler.getContext().putAll(contextProperties);
 		scheduler.getContext().put("scheduler", this);
+		scheduler.getListenerManager().addJobListener(new JobErrorListener(MISFIRE_DELAY, MAX_DELAY));
 	}
 
 	// =================================================================================================================

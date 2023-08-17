@@ -2,6 +2,11 @@ package net.foxgenesis.customjail.timer;
 
 import java.util.Optional;
 
+import net.foxgenesis.customjail.jail.IJailSystem;
+import net.foxgenesis.customjail.jail.IJailSystem.ErrorHandler;
+import net.foxgenesis.watame.WatameBot;
+import net.foxgenesis.watame.WatameBot.State;
+
 import org.quartz.Job;
 import org.quartz.JobDataMap;
 import org.quartz.JobExecutionContext;
@@ -13,10 +18,6 @@ import org.slf4j.LoggerFactory;
 
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Member;
-import net.foxgenesis.customjail.jail.IJailSystem;
-import net.foxgenesis.customjail.jail.IJailSystem.ErrorHandler;
-import net.foxgenesis.watame.WatameBot;
-import net.foxgenesis.watame.WatameBot.State;
 
 public class JailTimer implements Job {
 	private static final Logger logger = LoggerFactory.getLogger(JailTimer.class);
@@ -46,6 +47,10 @@ public class JailTimer implements Job {
 			Thread.onSpinWait();
 
 		long guildID = data.getLongValue("guild-id");
+		for (String id : WatameBot.INSTANCE.getJDA().getUnavailableGuilds())
+			if (id.equals("" + guildID))
+				error("Guild " + guildID + " is unavailable!");
+
 		Guild guild = WatameBot.INSTANCE.getJDA().getGuildById(guildID);
 
 		if (guild == null) {
@@ -72,13 +77,11 @@ public class JailTimer implements Job {
 
 	private static JobExecutionException error(String message) {
 		JobExecutionException e = new JobExecutionException(message);
-		e.setRefireImmediately(true);
 		return e;
 	}
 
 	private static JobExecutionException error(Throwable err) {
 		JobExecutionException e = new JobExecutionException(err);
-		e.setRefireImmediately(true);
 		return e;
 	}
 }

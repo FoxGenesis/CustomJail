@@ -47,6 +47,11 @@ public class WarningTimer implements Job {
 			Thread.onSpinWait();
 
 		long guildID = data.getLongValue("guild-id");
+
+		for (String id : WatameBot.INSTANCE.getJDA().getUnavailableGuilds())
+			if (id.equals("" + guildID))
+				error("Guild " + guildID + " is unavailable!");
+
 		Guild guild = WatameBot.INSTANCE.getJDA().getGuildById(guildID);
 
 		if (guild == null) {
@@ -70,13 +75,11 @@ public class WarningTimer implements Job {
 
 	private static JobExecutionException error(String message) {
 		JobExecutionException e = new JobExecutionException(message);
-		e.setUnscheduleFiringTrigger(true);
 		return e;
 	}
 
 	private static JobExecutionException error(Throwable err) {
 		JobExecutionException e = new JobExecutionException(err);
-		e.setUnscheduleFiringTrigger(true);
 		return e;
 	}
 }
