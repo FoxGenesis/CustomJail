@@ -612,7 +612,10 @@ public class JailSystem implements Closeable, IJailSystem {
 	private static <E extends Exception> void handleError(ErrorHandler<E> err,
 			BiFunction<String, Throwable, E> exceptionConstructor, String message, Throwable cause) {
 		try {
-			err.accept(exceptionConstructor.apply(message, cause));
+			String msg = message;
+			if(msg == null && cause != null)
+				msg = cause.getMessage();
+			err.accept(exceptionConstructor.apply(msg, cause));
 		} catch (Exception e1) {
 			throw new RuntimeException(e1);
 		}

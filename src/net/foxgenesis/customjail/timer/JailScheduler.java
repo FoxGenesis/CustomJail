@@ -8,6 +8,10 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Properties;
 
+import net.foxgenesis.customjail.jail.JailDetails;
+import net.foxgenesis.customjail.time.CustomTime;
+import net.foxgenesis.customjail.time.UnixTimestamp;
+
 import org.quartz.JobBuilder;
 import org.quartz.JobDetail;
 import org.quartz.JobKey;
@@ -23,9 +27,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import net.dv8tion.jda.api.entities.Member;
-import net.foxgenesis.customjail.jail.JailDetails;
-import net.foxgenesis.customjail.time.CustomTime;
-import net.foxgenesis.customjail.time.UnixTimestamp;
 
 public class JailScheduler implements AutoCloseable, IJailScheduler {
 	private static final Logger logger = LoggerFactory.getLogger(JailScheduler.class);

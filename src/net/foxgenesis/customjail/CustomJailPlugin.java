@@ -6,11 +6,38 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
 import java.util.function.Supplier;
+
+import net.foxgenesis.customjail.database.WarningDatabase;
+import net.foxgenesis.customjail.jail.IJailSystem;
+import net.foxgenesis.customjail.jail.JailSystem;
+import net.foxgenesis.customjail.jail.event.JailEventAdapter;
+import net.foxgenesis.customjail.jail.event.impl.JailTimerStartEvent;
+import net.foxgenesis.customjail.jail.event.impl.MemberJailEvent;
+import net.foxgenesis.customjail.jail.event.impl.MemberUnjailEvent;
+import net.foxgenesis.customjail.jail.event.impl.WarningAddedEvent;
+import net.foxgenesis.customjail.jail.event.impl.WarningReasonUpdateEvent;
+import net.foxgenesis.customjail.jail.event.impl.WarningRemovedEvent;
+import net.foxgenesis.customjail.time.CustomTime;
+import net.foxgenesis.customjail.util.Response;
+import net.foxgenesis.property.PropertyMapping;
+import net.foxgenesis.property.PropertyType;
+import net.foxgenesis.util.MethodTimer;
+import net.foxgenesis.util.StringUtils;
+import net.foxgenesis.watame.WatameBot;
+import net.foxgenesis.watame.plugin.CommandProvider;
+import net.foxgenesis.watame.plugin.IEventStore;
+import net.foxgenesis.watame.plugin.Plugin;
+import net.foxgenesis.watame.plugin.PluginConfiguration;
+import net.foxgenesis.watame.plugin.SeverePluginException;
+import net.foxgenesis.watame.property.PluginProperty;
+import net.foxgenesis.watame.property.PluginPropertyMapping;
+import net.foxgenesis.watame.util.Colors;
 
 import org.apache.commons.configuration2.Configuration;
 import org.apache.commons.lang3.exception.ExceptionUtils;
@@ -42,39 +69,15 @@ import net.dv8tion.jda.api.interactions.commands.build.OptionData;
 import net.dv8tion.jda.api.interactions.commands.build.SubcommandData;
 import net.dv8tion.jda.api.requests.RestAction;
 import net.dv8tion.jda.api.requests.restaction.WebhookMessageEditAction;
-import net.foxgenesis.customjail.database.WarningDatabase;
-import net.foxgenesis.customjail.jail.IJailSystem;
-import net.foxgenesis.customjail.jail.JailSystem;
-import net.foxgenesis.customjail.jail.event.JailEventAdapter;
-import net.foxgenesis.customjail.jail.event.impl.JailTimerStartEvent;
-import net.foxgenesis.customjail.jail.event.impl.MemberJailEvent;
-import net.foxgenesis.customjail.jail.event.impl.MemberUnjailEvent;
-import net.foxgenesis.customjail.jail.event.impl.WarningAddedEvent;
-import net.foxgenesis.customjail.jail.event.impl.WarningReasonUpdateEvent;
-import net.foxgenesis.customjail.jail.event.impl.WarningRemovedEvent;
-import net.foxgenesis.customjail.time.CustomTime;
-import net.foxgenesis.customjail.util.Response;
-import net.foxgenesis.database.IDatabaseManager;
-import net.foxgenesis.property.IProperty;
-import net.foxgenesis.util.MethodTimer;
-import net.foxgenesis.util.StringUtils;
-import net.foxgenesis.watame.WatameBot;
-import net.foxgenesis.watame.plugin.IEventStore;
-import net.foxgenesis.watame.plugin.Plugin;
-import net.foxgenesis.watame.plugin.PluginConfiguration;
-import net.foxgenesis.watame.plugin.SeverePluginException;
-import net.foxgenesis.watame.property.IGuildPropertyMapping;
-import net.foxgenesis.watame.property.IGuildPropertyProvider;
-import net.foxgenesis.watame.util.Colors;
 
 @PluginConfiguration(defaultFile = "/META-INF/configuration/jail.ini", identifier = "jail", outputFile = "jail.ini")
-public class CustomJailPlugin extends Plugin {
+public class CustomJailPlugin extends Plugin implements CommandProvider {
 
 	/**
 	 * Icon to be used on all embed footers
 	 */
 	public static String EMBED_FOOTER_ICON = "https://icons-for-free.com/iconfiles/png/512/jail+justice+law+police+prison+security+icon-1320190820835732524.png";
-	
+
 	/**
 	 * Time selection for jailing
 	 */
@@ -85,42 +88,32 @@ public class CustomJailPlugin extends Plugin {
 	/**
 	 * Muted role
 	 */
-	private static final IProperty<String, Guild, IGuildPropertyMapping> timeoutRole;
+	private static PluginProperty timeoutRole;
 
 	/**
 	 * Jail channel
 	 */
-	private static final IProperty<String, Guild, IGuildPropertyMapping> timeoutChannel;
+	private static PluginProperty timeoutChannel;
 
 	/**
 	 * Logging channel for jails
 	 */
-	private static final IProperty<String, Guild, IGuildPropertyMapping> logChannel;
+	private static PluginProperty logChannel;
 
 	/**
 	 * Warning duration
 	 */
-	private static final IProperty<String, Guild, IGuildPropertyMapping> warningTime;
+	private static PluginProperty warningTime;
 
 	/**
 	 * Max amount of warnings in a guild
 	 */
-	private static final IProperty<String, Guild, IGuildPropertyMapping> maxWarnings;
+	private static PluginProperty maxWarnings;
 
 	/**
 	 * Warning role prefix
 	 */
-	private static final IProperty<String, Guild, IGuildPropertyMapping> warningPrefix;
-
-	static {
-		IGuildPropertyProvider provider = WatameBot.INSTANCE.getPropertyProvider();
-		timeoutRole = provider.getProperty("jail_role");
-		timeoutChannel = provider.getProperty("jail_channel");
-		logChannel = provider.getProperty("jail_log_channel");
-		warningTime = provider.getProperty("jail_warning_time");
-		maxWarnings = provider.getProperty("jail_max_warnings");
-		warningPrefix = provider.getProperty("jail_warning_prefix");
-	}
+	private static PluginProperty warningPrefix;
 
 	// =================================================================================================================
 
@@ -130,17 +123,17 @@ public class CustomJailPlugin extends Plugin {
 	private JailSystem jail;
 
 	@Override
-	protected void onPropertiesLoaded(Properties properties) {}
+	protected void onConstruct(Properties meta, Map<String, Configuration> configs) {
+		for (String identifier : configs.keySet()) {
+			Configuration properties = configs.get(identifier);
+			switch (identifier) {
+				case "jail" -> {
+					this.updateRolesToDatabase = properties.getBoolean("updateRolesToDatabase", false);
 
-	@Override
-	protected void onConfigurationLoaded(String identifier, Configuration properties) {
-		switch (identifier) {
-			case "jail" -> {
-				this.updateRolesToDatabase = properties.getBoolean("updateRolesToDatabase", false);
-
-				if (this.updateRolesToDatabase)
-					logger.warn(
-							"*** updateRolesToDatabase is set to TRUE. Updating will start once program reaches ready state! ***");
+					if (this.updateRolesToDatabase)
+						logger.warn(
+								"*** updateRolesToDatabase is set to TRUE. Updating will start once program reaches ready state! ***");
+				}
 			}
 		}
 	}
@@ -148,9 +141,7 @@ public class CustomJailPlugin extends Plugin {
 	@Override
 	protected void preInit() {
 		try {
-			IDatabaseManager manager = WatameBot.INSTANCE.getDatabaseManager();
-			manager.register(this, database);
-
+			WatameBot.INSTANCE.getDatabaseManager().register(this, database);
 			jail = new JailSystem(database);
 		} catch (IOException e) {
 			throw new SeverePluginException("Failed to register warning database", e, true);
@@ -161,6 +152,13 @@ public class CustomJailPlugin extends Plugin {
 
 	@Override
 	protected void init(IEventStore builder) {
+		timeoutRole = upsertProperty("jail_role", true, PropertyType.NUMBER);
+		timeoutChannel = upsertProperty("jail_channel", true, PropertyType.NUMBER);
+		logChannel = upsertProperty("jail_log_channel", true, PropertyType.NUMBER);
+		warningTime = upsertProperty("jail_warning_time", true, PropertyType.NUMBER);
+		maxWarnings = upsertProperty("jail_max_warnings", true, PropertyType.NUMBER);
+		warningPrefix = upsertProperty("jail_warning_prefix", true, PropertyType.PLAIN);
+
 		// User interaction handler
 		builder.registerListeners(this, new JailFrontend(jail));
 
@@ -414,16 +412,15 @@ public class CustomJailPlugin extends Plugin {
 	}
 
 	@Override
-	protected void postInit(WatameBot bot) {
+	protected void postInit(WatameBot bot) {}
+
+	@Override
+	protected void onReady(WatameBot bot) {
 		try {
 			jail.start();
 		} catch (Exception e) {
 			throw new SeverePluginException("Failed to start jailer", e, true);
 		}
-	}
-
-	@Override
-	protected void onReady(WatameBot bot) {
 		if (this.updateRolesToDatabase) {
 			logger.warn("Updating roles to database...");
 			long start = System.nanoTime();
@@ -534,11 +531,9 @@ public class CustomJailPlugin extends Plugin {
 	}
 
 	public static Optional<RestAction<?>> modlog(@NotNull Guild guild, @NotNull Supplier<MessageEmbed> embed) {
-		GuildMessageChannel channel = CustomJailPlugin.logChannel
-				.get(guild,
-						() -> WatameBot.INSTANCE.getGuildLoggingChannel().get(guild,
-								IGuildPropertyMapping::getAsMessageChannel),
-						IGuildPropertyMapping::getAsMessageChannel);
+		GuildMessageChannel channel = CustomJailPlugin.logChannel.get(guild,
+				() -> WatameBot.INSTANCE.getLoggingChannel().get(guild, PluginPropertyMapping::getAsMessageChannel),
+				PluginPropertyMapping::getAsMessageChannel);
 		return Optional.ofNullable(channel).map(c -> c.sendMessageEmbeds(embed.get()).addCheck(channel::canTalk)
 				.addCheck(() -> guild.getSelfMember().hasPermission(Permission.MESSAGE_EMBED_LINKS)));
 	}
@@ -609,26 +604,26 @@ public class CustomJailPlugin extends Plugin {
 
 	@Nullable
 	public static Role getTimeoutRole(@NotNull Guild guild) {
-		return timeoutRole.get(guild, IGuildPropertyMapping::getAsRole);
+		return timeoutRole.get(guild, PluginPropertyMapping::getAsRole);
 	}
 
 	@Nullable
 	public static GuildMessageChannel getJailChannel(@NotNull Guild guild) {
-		return timeoutChannel.get(guild, IGuildPropertyMapping::getAsMessageChannel);
+		return timeoutChannel.get(guild, PluginPropertyMapping::getAsMessageChannel);
 	}
 
 	public static int getMaxWarnings(@NotNull Guild guild) {
-		return maxWarnings.get(guild, 3, IGuildPropertyMapping::getAsInt);
+		return maxWarnings.get(guild, () -> 3, PropertyMapping::getAsInt);
 	}
 
 	@NotNull
 	public static String getWarningPrefix(@NotNull Guild guild) {
-		return warningPrefix.get(guild, "Warning", IGuildPropertyMapping::getAsString);
+		return warningPrefix.get(guild, () -> "Warning", PropertyMapping::getAsString);
 	}
 
 	@NotNull
 	public static CustomTime getWarningTime(@NotNull Guild guild) {
-		return new CustomTime(warningTime.get(guild, 1, IGuildPropertyMapping::getAsInt) + "M");
+		return new CustomTime(warningTime.get(guild, () -> 1, PropertyMapping::getAsInt) + "m");
 	}
 
 	// =================================================================================================================
