@@ -623,7 +623,7 @@ public class CustomJailPlugin extends Plugin implements CommandProvider {
 
 	@NotNull
 	public static CustomTime getWarningTime(@NotNull Guild guild) {
-		return new CustomTime(warningTime.get(guild, () -> 1, PropertyMapping::getAsInt) + "m");
+		return new CustomTime(warningTime.get(guild, () -> 1, PropertyMapping::getAsInt) + "M");
 	}
 
 	// =================================================================================================================
