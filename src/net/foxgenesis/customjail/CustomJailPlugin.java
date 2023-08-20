@@ -531,11 +531,15 @@ public class CustomJailPlugin extends Plugin implements CommandProvider {
 	}
 
 	public static Optional<RestAction<?>> modlog(@NotNull Guild guild, @NotNull Supplier<MessageEmbed> embed) {
-		GuildMessageChannel channel = CustomJailPlugin.logChannel.get(guild,
-				() -> WatameBot.INSTANCE.getLoggingChannel().get(guild, PluginPropertyMapping::getAsMessageChannel),
-				PluginPropertyMapping::getAsMessageChannel);
-		return Optional.ofNullable(channel).map(c -> c.sendMessageEmbeds(embed.get()).addCheck(channel::canTalk)
-				.addCheck(() -> guild.getSelfMember().hasPermission(Permission.MESSAGE_EMBED_LINKS)));
+		return CustomJailPlugin.logChannel.getOr(guild, WatameBot.INSTANCE.getLoggingChannel())
+				// As message channel
+				.map(PluginPropertyMapping::getAsMessageChannel)
+				// Where we have permission to talk
+				.filter(GuildMessageChannel::canTalk)
+				// Where we have permission to send embeds
+				.filter(c -> guild.getSelfMember().hasPermission(c, Permission.MESSAGE_EMBED_LINKS))
+				// Send embed
+				.map(c -> c.sendMessageEmbeds(embed.get()));
 	}
 
 	/**
