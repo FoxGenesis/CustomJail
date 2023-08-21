@@ -6,10 +6,8 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Properties;
 import java.util.Set;
 import java.util.function.Supplier;
 
@@ -29,6 +27,7 @@ import net.foxgenesis.property.PropertyMapping;
 import net.foxgenesis.property.PropertyType;
 import net.foxgenesis.util.MethodTimer;
 import net.foxgenesis.util.StringUtils;
+import net.foxgenesis.util.resource.ConfigType;
 import net.foxgenesis.watame.WatameBot;
 import net.foxgenesis.watame.plugin.CommandProvider;
 import net.foxgenesis.watame.plugin.IEventStore;
@@ -70,7 +69,7 @@ import net.dv8tion.jda.api.interactions.commands.build.SubcommandData;
 import net.dv8tion.jda.api.requests.RestAction;
 import net.dv8tion.jda.api.requests.restaction.WebhookMessageEditAction;
 
-@PluginConfiguration(defaultFile = "/META-INF/configuration/jail.ini", identifier = "jail", outputFile = "jail.ini")
+@PluginConfiguration(defaultFile = "/META-INF/configuration/jail.ini", identifier = "jail", outputFile = "jail.ini", type = ConfigType.INI)
 public class CustomJailPlugin extends Plugin implements CommandProvider {
 
 	/**
@@ -117,32 +116,45 @@ public class CustomJailPlugin extends Plugin implements CommandProvider {
 
 	// =================================================================================================================
 
-	private volatile boolean updateRolesToDatabase;
+	private final boolean updateRolesToDatabase;
 
 	private final WarningDatabase database = new WarningDatabase();
+	private SchedulerSettings settings = new SchedulerSettings();
 	private JailSystem jail;
 
-	@Override
-	protected void onConstruct(Properties meta, Map<String, Configuration> configs) {
-		for (String identifier : configs.keySet()) {
-			Configuration properties = configs.get(identifier);
+	public CustomJailPlugin() {
+		super();
+		boolean updateDatabase = false;
+
+		for (String identifier : this.configurationKeySet()) {
+			Configuration config = this.getConfiguration(identifier);
 			switch (identifier) {
 				case "jail" -> {
-					this.updateRolesToDatabase = properties.getBoolean("updateRolesToDatabase", false);
+					// Scheduler settings
+					String name = config.getString("name", "JailScheduler");
+					String id = config.getString("id", "NON_CLUSTERED");
+					boolean update = config.getBoolean("skipUpdateCheck", true);
+					int count = config.getInt("threadCount", 1);
+					settings = new SchedulerSettings(name, id, update, count);
 
-					if (this.updateRolesToDatabase)
-						logger.warn(
-								"*** updateRolesToDatabase is set to TRUE. Updating will start once program reaches ready state! ***");
+					// Miscellaneous settings
+					updateDatabase = config.getBoolean("updateRolesToDatabase", updateDatabase);
 				}
 			}
 		}
+
+		this.updateRolesToDatabase = updateDatabase;
 	}
 
 	@Override
 	protected void preInit() {
+		if (this.updateRolesToDatabase)
+			logger.warn(
+					"*** updateRolesToDatabase is set to TRUE. Updating will start once program reaches ready state! ***");
+
 		try {
 			WatameBot.INSTANCE.getDatabaseManager().register(this, database);
-			jail = new JailSystem(database);
+			jail = new JailSystem(database, settings);
 		} catch (IOException e) {
 			throw new SeverePluginException("Failed to register warning database", e, true);
 		} catch (SchedulerException e) {

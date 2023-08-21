@@ -37,6 +37,7 @@ import net.dv8tion.jda.api.interactions.components.buttons.Button;
 import net.dv8tion.jda.api.requests.RestAction;
 import net.dv8tion.jda.api.requests.restaction.MessageCreateAction;
 import net.foxgenesis.customjail.CustomJailPlugin;
+import net.foxgenesis.customjail.SchedulerSettings;
 import net.foxgenesis.customjail.database.IWarningDatabase;
 import net.foxgenesis.customjail.database.Warning;
 import net.foxgenesis.customjail.jail.event.IJailEventBus;
@@ -65,7 +66,7 @@ public class JailSystem implements Closeable, IJailSystem {
 	private final IWarningDatabase database;
 	private final JailEventBus bus;
 
-	public JailSystem(IWarningDatabase database) throws IOException, SchedulerException {
+	public JailSystem(IWarningDatabase database, SchedulerSettings settings) throws IOException, SchedulerException {
 		logger.info("Creating jail scheduler");
 		Properties prop = new ModuleResource("watamebot.customjail", "/META-INF/quartz.properties").asProperties();
 		Properties prop2 = new Properties();
@@ -73,6 +74,8 @@ public class JailSystem implements Closeable, IJailSystem {
 			prop2.load(in);
 		}
 		prop.putAll(prop2);
+
+		settings.addToProperties(prop);
 
 		this.scheduler = new JailScheduler(prop, Map.of("jailSystem", this));
 		this.database = Objects.requireNonNull(database);
@@ -613,7 +616,7 @@ public class JailSystem implements Closeable, IJailSystem {
 			BiFunction<String, Throwable, E> exceptionConstructor, String message, Throwable cause) {
 		try {
 			String msg = message;
-			if(msg == null && cause != null)
+			if (msg == null && cause != null)
 				msg = cause.getMessage();
 			err.accept(exceptionConstructor.apply(msg, cause));
 		} catch (Exception e1) {
