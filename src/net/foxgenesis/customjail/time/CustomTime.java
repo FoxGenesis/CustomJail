@@ -7,6 +7,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import org.apache.commons.lang3.time.DateUtils;
+import org.jetbrains.annotations.NotNull;
 
 public class CustomTime {
 
@@ -14,15 +15,17 @@ public class CustomTime {
 	private static final String[] index = { "S", "s", "m", "h", "D", "W", "M", "Y" };
 	private static final int[] cap = { 1000, 60, 60, 24, 7, 4, 12, -1 };
 
+	@NotNull
 	private final Map<String, Long> parts;
 
-	public CustomTime(String str) {
+	public CustomTime(@NotNull String str) {
 		Objects.requireNonNull(str);
 		if (str.isBlank())
 			throw new NumberFormatException("Unable to parse blank string");
 		this.parts = getParts(str);
 	}
 
+	@NotNull
 	public CustomTime normalize() {
 		// Normalize values
 		long tmp, tmp2;
@@ -49,6 +52,7 @@ public class CustomTime {
 		return this;
 	}
 
+	@NotNull
 	public Date addTo(Date date) {
 		Date tmp = date;
 		int[] tmp2 = { 0, 0 };
@@ -86,6 +90,7 @@ public class CustomTime {
 		return tmp;
 	}
 
+	@NotNull
 	public String getDisplayString() {
 		StringBuilder b = new StringBuilder();
 		long value;
@@ -152,6 +157,7 @@ public class CustomTime {
 		return b.toString();
 	}
 
+	@NotNull
 	private static Map<String, Long> getParts(String raw) {
 		// Map type to values
 		Map<String, Long> map = pattern.matcher(raw).results()

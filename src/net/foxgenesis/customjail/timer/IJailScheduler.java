@@ -1,42 +1,49 @@
 package net.foxgenesis.customjail.timer;
 
-import java.time.temporal.TemporalAmount;
-import java.util.function.Consumer;
-
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import java.time.Duration;
+import java.util.Date;
+import java.util.Optional;
 
 import org.quartz.JobKey;
 import org.quartz.SchedulerException;
 import org.quartz.SimpleTrigger;
 
 import net.dv8tion.jda.api.entities.Member;
-import net.dv8tion.jda.api.entities.Role;
-import net.dv8tion.jda.api.requests.RestAction;
-import net.foxgenesis.customjail.database.IWarningDatabase;
+import net.foxgenesis.customjail.jail.JailDetails;
 import net.foxgenesis.customjail.time.CustomTime;
+import net.foxgenesis.customjail.time.UnixTimestamp;
 
 public interface IJailScheduler {
 
-	boolean createJailTimer(Member member, CustomTime time) throws SchedulerException;
+	boolean createJailTimer(JailDetails details) throws SchedulerException;
+
 	boolean startJailTimer(Member member);
-	boolean extendJailTimer(Member member, TemporalAmount newTime);
+
 	boolean isJailed(Member member);
+
 	boolean isJailTimerRunning(Member member);
+
 	boolean removeJailTimer(Member member);
-	
+
+	Optional<JailDetails> getJailDetails(Member member) throws SchedulerException;
+
 	boolean createWarningTimer(Member member, CustomTime time);
+
+	boolean rescheduleWarningTimer(Member member, CustomTime time);
+
 	boolean isWarningTimerRunning(Member member);
-	boolean resetWarningTimer(Member member);
-	boolean updateWarningTimer(Member member, TemporalAmount newTime);
+
 	boolean removeWarningTimer(Member member);
-	
-	@Nullable
-	RestAction<?> updateWarningLevel(Member member, int newLevel);
-	
-	@Nonnull
+
+	Optional<UnixTimestamp> getWarningEndTimestamp(Member member);
+
+	Optional<UnixTimestamp> getJailEndTimestamp(Member member);
+
+	Optional<Duration> getRemainingJailTime(Member member);
+
+	Date getJailEndDate(Member member);
+
+	Date getWarningEndDate(Member member);
+
 	SimpleTrigger createWarningTrigger(JobKey key, CustomTime time);
-	
-	void unjail(Member member, Role timeoutRole, Member mod, String reason, IWarningDatabase database,
-			Consumer<Member> success, Consumer<Throwable> err);
 }

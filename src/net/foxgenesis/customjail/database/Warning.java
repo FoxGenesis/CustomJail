@@ -1,20 +1,33 @@
 package net.foxgenesis.customjail.database;
 
 import java.sql.Timestamp;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-import java.time.temporal.TemporalAccessor;
+import java.util.regex.MatchResult;
+import java.util.regex.Pattern;
 
-public record Warning(String reason, String moderator, TemporalAccessor time, int caseId, boolean active) {
-	public Warning(String reason, String moderator, Timestamp time, int caseId, boolean active) {
-		this(reason, moderator, time.toInstant(), caseId, active);
+public record Warning(long guildID, long memberID, String reason, String moderator, long time, int caseId,
+		boolean active) {
+	
+	public Warning(long guildID, long memberID, String reason, String moderator, Timestamp timestamp, int caseID, boolean active) {
+		this(guildID, memberID, reason, moderator, timestamp.getTime(), caseID, active);
+	}
+	private static final Pattern externalPattern = Pattern.compile("%([a-zA-Z0-9]+)%");
+
+	public String toExternalFormat(String format) {
+		return externalPattern.matcher(format).replaceAll(result -> replace(result));
 	}
 
-	public Warning(String reason, String moderator, LocalDateTime time, int caseId, boolean active) {
-		this(reason, moderator, Timestamp.valueOf(time), caseId, active);
+	public String toFormattedString(String format) {
+		return format.formatted(caseId, "<t:" + (time / 1000) + ">", moderator, reason, active);
 	}
 
-	public String toFormattedString(String format, DateTimeFormatter formatter) {
-		return format.formatted(reason, moderator, formatter.format(time), caseId, active);
+	private String replace(MatchResult result) {
+		return switch (result.group(1)) {
+			case "caseid" -> "" + caseId;
+			case "date" -> "<t:" + (time / 1000) + ":R>";
+			case "moderator" -> "<@" + moderator + ">";
+			case "reason" -> reason;
+			case "active" -> Boolean.toString(active);
+			default -> "null";
+		};
 	}
 }
