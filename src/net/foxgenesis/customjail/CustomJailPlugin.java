@@ -29,11 +29,11 @@ import net.foxgenesis.util.MethodTimer;
 import net.foxgenesis.util.StringUtils;
 import net.foxgenesis.util.resource.ConfigType;
 import net.foxgenesis.watame.WatameBot;
-import net.foxgenesis.watame.plugin.CommandProvider;
 import net.foxgenesis.watame.plugin.IEventStore;
 import net.foxgenesis.watame.plugin.Plugin;
-import net.foxgenesis.watame.plugin.PluginConfiguration;
 import net.foxgenesis.watame.plugin.SeverePluginException;
+import net.foxgenesis.watame.plugin.require.CommandProvider;
+import net.foxgenesis.watame.plugin.require.PluginConfiguration;
 import net.foxgenesis.watame.property.PluginProperty;
 import net.foxgenesis.watame.property.PluginPropertyMapping;
 import net.foxgenesis.watame.util.Colors;
@@ -68,7 +68,7 @@ import net.dv8tion.jda.api.interactions.commands.build.OptionData;
 import net.dv8tion.jda.api.interactions.commands.build.SubcommandData;
 import net.dv8tion.jda.api.requests.RestAction;
 import net.dv8tion.jda.api.requests.restaction.WebhookMessageEditAction;
-
+	
 @PluginConfiguration(defaultFile = "/META-INF/configuration/jail.ini", identifier = "jail", outputFile = "jail.ini", type = ConfigType.INI)
 public class CustomJailPlugin extends Plugin implements CommandProvider {
 
@@ -115,35 +115,33 @@ public class CustomJailPlugin extends Plugin implements CommandProvider {
 	private static PluginProperty warningPrefix;
 
 	// =================================================================================================================
+	private final WarningDatabase database;
+	private final SchedulerSettings settings;
 
 	private final boolean updateRolesToDatabase;
 
-	private final WarningDatabase database = new WarningDatabase();
-	private SchedulerSettings settings = new SchedulerSettings();
 	private JailSystem jail;
 
 	public CustomJailPlugin() {
 		super();
-		boolean updateDatabase = false;
+		// Load jail Settings
+		if (hasConfiguration("jail")) {
+			Configuration config = getConfiguration("jail");
+			// [Scheduler] settings
+			String name = config.getString("Scheduler.name", "JailScheduler");
+			String id = config.getString("Scheduler.id", "NON_CLUSTERED");
+			boolean update = config.getBoolean("Scheduler.skipUpdateCheck", true);
+			String count = config.getString("Scheduler.threadCount", "1");
+			this.settings = new SchedulerSettings(name, id, update, count);
 
-		for (String identifier : this.configurationKeySet()) {
-			Configuration config = this.getConfiguration(identifier);
-			switch (identifier) {
-				case "jail" -> {
-					// Scheduler settings
-					String name = config.getString("name", "JailScheduler");
-					String id = config.getString("id", "NON_CLUSTERED");
-					boolean update = config.getBoolean("skipUpdateCheck", true);
-					int count = config.getInt("threadCount", 1);
-					settings = new SchedulerSettings(name, id, update, count);
-
-					// Miscellaneous settings
-					updateDatabase = config.getBoolean("updateRolesToDatabase", updateDatabase);
-				}
-			}
+			// [Miscellaneous] settings
+			this.updateRolesToDatabase = config.getBoolean("Miscellaneous.updateRolesToDatabase", false);
+		} else {
+			this.settings = new SchedulerSettings();
+			this.updateRolesToDatabase = false;
 		}
 
-		this.updateRolesToDatabase = updateDatabase;
+		database = new WarningDatabase();
 	}
 
 	@Override
@@ -153,7 +151,7 @@ public class CustomJailPlugin extends Plugin implements CommandProvider {
 					"*** updateRolesToDatabase is set to TRUE. Updating will start once program reaches ready state! ***");
 
 		try {
-			WatameBot.INSTANCE.getDatabaseManager().register(this, database);
+			WatameBot.getDatabaseManager().register(this, database);
 			jail = new JailSystem(database, settings);
 		} catch (IOException e) {
 			throw new SeverePluginException("Failed to register warning database", e, true);
@@ -424,10 +422,10 @@ public class CustomJailPlugin extends Plugin implements CommandProvider {
 	}
 
 	@Override
-	protected void postInit(WatameBot bot) {}
+	protected void postInit() {}
 
 	@Override
-	protected void onReady(WatameBot bot) {
+	protected void onReady() {
 		try {
 			jail.start();
 		} catch (Exception e) {
@@ -436,7 +434,7 @@ public class CustomJailPlugin extends Plugin implements CommandProvider {
 		if (this.updateRolesToDatabase) {
 			logger.warn("Updating roles to database...");
 			long start = System.nanoTime();
-			bot.getJDA().getGuildCache().forEach(jail::updateRolesToDatabase);
+			WatameBot.getJDA().getGuildCache().forEach(jail::updateRolesToDatabase);
 			long end = System.nanoTime();
 			logger.warn("Finished updating roles to database in {} seconds",
 					MethodTimer.formatToSeconds(end - start, 2));
@@ -543,7 +541,7 @@ public class CustomJailPlugin extends Plugin implements CommandProvider {
 	}
 
 	public static Optional<RestAction<?>> modlog(@NotNull Guild guild, @NotNull Supplier<MessageEmbed> embed) {
-		return CustomJailPlugin.logChannel.getOr(guild, WatameBot.INSTANCE.getLoggingChannel())
+		return CustomJailPlugin.logChannel.getOr(guild, WatameBot.getLoggingChannel())
 				// As message channel
 				.map(PluginPropertyMapping::getAsMessageChannel)
 				// Where we have permission to talk

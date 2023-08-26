@@ -12,7 +12,6 @@ public class JailEmbed extends ACustomEmbed {
 		super(messageEmbed);
 		builder.setTitle("Jail User");
 		builder.setFooter("via Custom Jail", CustomJailPlugin.EMBED_FOOTER_ICON);
-		// builder.setThumbnail("https://media.tenor.com/JwnY0jHr7_MAAAAi/bonk-cat-ouch.gif");
 	}
 
 	public JailEmbed setMember(Member member) {

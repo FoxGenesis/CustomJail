@@ -2,10 +2,10 @@ package net.foxgenesis.customjail;
 
 import java.util.Properties;
 
-public record SchedulerSettings(String name, String id, boolean skipUpdateCheck, int threadCount) {
+public record SchedulerSettings(String name, String id, boolean skipUpdateCheck, String threadCount) {
 	
 	public SchedulerSettings() {
-		this("JailScheduler", "NON_CLUSTERED", true, 1);
+		this("JailScheduler", "NON_CLUSTERED", true, "1");
 	}
 	
 	public void addToProperties(Properties properties) {
