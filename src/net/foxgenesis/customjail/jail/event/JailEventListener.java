@@ -2,6 +2,7 @@ package net.foxgenesis.customjail.jail.event;
 
 import net.foxgenesis.customjail.jail.event.impl.JailTimerStartEvent;
 import net.foxgenesis.customjail.jail.event.impl.MemberJailEvent;
+import net.foxgenesis.customjail.jail.event.impl.MemberLeaveWhileJailedEvent;
 import net.foxgenesis.customjail.jail.event.impl.MemberUnjailEvent;
 import net.foxgenesis.customjail.jail.event.impl.WarningAddedEvent;
 import net.foxgenesis.customjail.jail.event.impl.WarningReasonUpdateEvent;
@@ -26,4 +27,6 @@ public interface JailEventListener {
 	public void onWarningRemove(WarningRemovedEvent event);
 	
 	public void onWarningReasonUpdated(WarningReasonUpdateEvent event);
+	
+	public void onMemberLeaveWhileJailed(MemberLeaveWhileJailedEvent event);
 }

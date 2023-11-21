@@ -17,7 +17,11 @@ public class JailEmbed extends ACustomEmbed {
 	public JailEmbed setMember(Member member) {
 		builder.setAuthor(member.getEffectiveName(), null, member.getEffectiveAvatarUrl()).setColor(member.getColor());
 		replaceField(new Field("User", member.getAsMention(), true));
-		addBlank();
+		return this;
+	}
+	
+	public JailEmbed setCurrentLevel(int currentLevel) {
+		replaceField(new Field("Warning Level", "" + currentLevel, true));
 		return this;
 	}
 

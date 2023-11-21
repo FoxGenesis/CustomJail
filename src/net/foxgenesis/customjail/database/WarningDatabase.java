@@ -1,12 +1,16 @@
 package net.foxgenesis.customjail.database;
 
+import java.sql.CallableStatement;
 import java.sql.JDBCType;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
+import net.foxgenesis.customjail.jail.WarningDetails;
 import net.foxgenesis.database.AbstractDatabase;
 import net.foxgenesis.util.StringUtils;
 import net.foxgenesis.util.resource.ModuleResource;
@@ -88,6 +92,24 @@ public class WarningDatabase extends AbstractDatabase implements IWarningDatabas
 	}
 
 	@Override
+	public Collection<Warning> getWarnings(Member member) {
+		try {
+			return mapStatement("get_all_warnings_for_member", statement -> {
+				statement.setLong(1, member.getGuild().getIdLong());
+				statement.setLong(2, member.getIdLong());
+
+				try (ResultSet result = statement.executeQuery()) {
+					return List.of(parseWarnings(result));
+				}
+
+			}).orElse(Collections.emptyList());
+		} catch (SQLException e) {
+			logger.error("Failed to get warnings for " + member, e);
+			return Collections.emptyList();
+		}
+	}
+
+	@Override
 	public Warning[] getWarningsPageForMember(Member member, int itemsPerPage, int page) {
 		return getWarningsPageForMember(member.getGuild().getIdLong(), member.getIdLong(), itemsPerPage, page);
 	}
@@ -131,6 +153,30 @@ public class WarningDatabase extends AbstractDatabase implements IWarningDatabas
 		} catch (SQLException e) {
 			logger.error("Failed to add warning for member " + member, e);
 			return -1;
+		}
+	}
+
+	@SuppressWarnings("resource")
+	@Override
+	public Transaction<WarningDetails> createWarningTransaction(Member member, Member moderator, String reason,
+			boolean active) {
+		try {
+			return new WarningTransaction(openConnection(), c -> {
+				try (CallableStatement statement = c.prepareCall(getRawStatement("add_warning"))) {
+					statement.setLong(1, member.getGuild().getIdLong());
+					statement.setLong(2, member.getIdLong());
+					statement.setString(3, moderator.getUser().getId());
+					statement.setString(4, StringUtils.limit(reason, 500));
+					statement.setBoolean(5, active);
+					statement.registerOutParameter(6, JDBCType.INTEGER);
+					statement.execute();
+					int id = statement.getInt(6);
+					return new WarningDetails(member, moderator, reason, System.currentTimeMillis(), id, active);
+				}
+			});
+		} catch (SQLException e) {
+			logger.error("Failed to add warning for member " + member, e);
+			return null;
 		}
 	}
 
@@ -216,8 +262,8 @@ public class WarningDatabase extends AbstractDatabase implements IWarningDatabas
 
 	@Nullable
 	private static Warning parseWarning(ResultSet result) throws SQLException {
-		return new Warning(result.getLong("guild_id"), result.getLong("member_id"), result.getString("reason"),
-				result.getString("moderator"), result.getTimestamp("date"), result.getInt("case_id"),
+		return new Warning(result.getLong("guild_id"), result.getLong("member_id"), result.getLong("moderator"),
+				result.getString("reason"), result.getTimestamp("date"), result.getInt("case_id"),
 				result.getBoolean("active"));
 	}
 }

@@ -23,6 +23,10 @@ public record JailDetails(Member member, Member moderator, CustomTime duration, 
 	public JailDetails(Member member, Member moderator, CustomTime duration, String reason, int caseid) {
 		this(member, moderator, duration, reason, caseid, System.currentTimeMillis());
 	}
+	
+	public JailDetails(Member member, JailDetails details) {
+		this(member, details.moderator, details.duration, details.reason, details.caseid);
+	}
 
 	public JobDataMap asDataMap() {
 		JobDataMap map = new JobDataMap();

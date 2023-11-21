@@ -5,23 +5,29 @@ import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
 import net.foxgenesis.customjail.database.WarningDatabase;
 import net.foxgenesis.customjail.jail.IJailSystem;
 import net.foxgenesis.customjail.jail.JailSystem;
+import net.foxgenesis.customjail.jail.WarningDetails;
 import net.foxgenesis.customjail.jail.event.JailEventAdapter;
 import net.foxgenesis.customjail.jail.event.impl.JailTimerStartEvent;
 import net.foxgenesis.customjail.jail.event.impl.MemberJailEvent;
+import net.foxgenesis.customjail.jail.event.impl.MemberLeaveWhileJailedEvent;
 import net.foxgenesis.customjail.jail.event.impl.MemberUnjailEvent;
 import net.foxgenesis.customjail.jail.event.impl.WarningAddedEvent;
 import net.foxgenesis.customjail.jail.event.impl.WarningReasonUpdateEvent;
 import net.foxgenesis.customjail.jail.event.impl.WarningRemovedEvent;
 import net.foxgenesis.customjail.time.CustomTime;
+import net.foxgenesis.customjail.time.UnixTimestamp;
 import net.foxgenesis.customjail.util.Response;
 import net.foxgenesis.property.PropertyMapping;
 import net.foxgenesis.property.PropertyType;
@@ -37,6 +43,7 @@ import net.foxgenesis.watame.plugin.require.PluginConfiguration;
 import net.foxgenesis.watame.property.PluginProperty;
 import net.foxgenesis.watame.property.PluginPropertyMapping;
 import net.foxgenesis.watame.util.Colors;
+import net.foxgenesis.watame.util.DiscordUtils;
 
 import org.apache.commons.configuration2.Configuration;
 import org.apache.commons.lang3.exception.ExceptionUtils;
@@ -47,6 +54,7 @@ import org.quartz.SchedulerException;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.entities.Guild;
+import net.dv8tion.jda.api.entities.GuildVoiceState;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.MessageEmbed;
@@ -56,6 +64,7 @@ import net.dv8tion.jda.api.entities.channel.concrete.ThreadChannel;
 import net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel;
 import net.dv8tion.jda.api.entities.channel.unions.GuildChannelUnion;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
+import net.dv8tion.jda.api.exceptions.ErrorHandler;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.interactions.InteractionHook;
 import net.dv8tion.jda.api.interactions.commands.Command;
@@ -66,9 +75,11 @@ import net.dv8tion.jda.api.interactions.commands.build.CommandData;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
 import net.dv8tion.jda.api.interactions.commands.build.OptionData;
 import net.dv8tion.jda.api.interactions.commands.build.SubcommandData;
+import net.dv8tion.jda.api.requests.ErrorResponse;
 import net.dv8tion.jda.api.requests.RestAction;
 import net.dv8tion.jda.api.requests.restaction.WebhookMessageEditAction;
-	
+import net.dv8tion.jda.api.utils.MarkdownUtil;
+
 @PluginConfiguration(defaultFile = "/META-INF/configuration/jail.ini", identifier = "jail", outputFile = "jail.ini", type = ConfigType.INI)
 public class CustomJailPlugin extends Plugin implements CommandProvider {
 
@@ -113,6 +124,16 @@ public class CustomJailPlugin extends Plugin implements CommandProvider {
 	 * Warning role prefix
 	 */
 	private static PluginProperty warningPrefix;
+
+	/**
+	 * Should members be banned if they leave while jailed
+	 */
+	private static PluginProperty banOnLeave;
+
+	/**
+	 * Should member's be notified via a DM
+	 */
+	private static PluginProperty notifyMember;
 
 	// =================================================================================================================
 	private final WarningDatabase database;
@@ -167,10 +188,12 @@ public class CustomJailPlugin extends Plugin implements CommandProvider {
 		logChannel = upsertProperty("jail_log_channel", true, PropertyType.NUMBER);
 		warningTime = upsertProperty("jail_warning_time", true, PropertyType.NUMBER);
 		maxWarnings = upsertProperty("jail_max_warnings", true, PropertyType.NUMBER);
+		banOnLeave = upsertProperty("jail_ban_on_leave", true, PropertyType.NUMBER);
 		warningPrefix = upsertProperty("jail_warning_prefix", true, PropertyType.PLAIN);
+		notifyMember = upsertProperty("jail_notify_member", true, PropertyType.NUMBER);
 
 		// User interaction handler
-		builder.registerListeners(this, new JailFrontend(jail));
+		builder.registerListeners(this, new JailFrontend(jail), jail);
 
 		// Configuration command
 		builder.registerListeners(this, new ListenerAdapter() {
@@ -198,6 +221,8 @@ public class CustomJailPlugin extends Plugin implements CommandProvider {
 						Integer months = event.getOption("warning_time", OptionMapping::getAsInt);
 						Integer maxWarnings = event.getOption("max_warnings", OptionMapping::getAsInt);
 						String prefix = event.getOption("warning_role_prefix", OptionMapping::getAsString);
+						Boolean ban = event.getOption("ban_on_leave", OptionMapping::getAsBoolean);
+						Boolean notify = event.getOption("notify_member", OptionMapping::getAsBoolean);
 
 						// Get warning roles
 						List<Role> warningRoles = guild.getRoles().stream()
@@ -232,12 +257,28 @@ public class CustomJailPlugin extends Plugin implements CommandProvider {
 						}
 
 						// Validate jail channel
-						if (channel != null && !isValidChannel(hook, channel))
+						if (channel != null && !isValidChannel(hook, channel)) {
+							hook.editOriginalEmbeds(Response.error(channel.getAsMention()
+									+ " is either locked/archived or bot is missing permissions to view channel and send embeds"))
+									.queue();
 							return;
+						}
 
 						// Validate logging channel
-						if (logChannel != null && !isValidChannel(hook, logChannel))
+						if (logChannel != null && !isValidChannel(hook, logChannel)) {
+							hook.editOriginalEmbeds(Response.error(logChannel.getAsMention()
+									+ " is either locked/archived or bot is missing permissions to view channel and send embeds"))
+									.queue();
 							return;
+						}
+
+						// Check if we have ban permissions
+						if (ban != null && ban && !self.hasPermission(Permission.BAN_MEMBERS)) {
+							hook.editOriginalEmbeds(
+									Response.error("Ban on leave is set to true but bot is missing ban permissions!"))
+									.queue();
+							return;
+						}
 
 						// Set and build output
 						StringBuilder builder = new StringBuilder();
@@ -259,6 +300,12 @@ public class CustomJailPlugin extends Plugin implements CommandProvider {
 						if (maxWarnings != null && CustomJailPlugin.maxWarnings.set(guild, maxWarnings, true))
 							builder.append("* **Max Warnings** -> " + maxWarnings + "\n");
 
+						if (ban != null && banOnLeave.set(guild, ban, true))
+							builder.append("* **Ban On Leave** -> " + ban + "\n");
+
+						if (notify != null && notifyMember.set(guild, notify, true))
+							builder.append("* **Notify Member** -> " + notify + "\n");
+
 						hook.editOriginalEmbeds(Response.success("Updated Configuration", builder.toString().strip()),
 								Response.success("Role Assignment", roleBuilder.toString().strip())).queue();
 					}
@@ -271,8 +318,15 @@ public class CustomJailPlugin extends Plugin implements CommandProvider {
 
 			@Override
 			public void onMemberJail(MemberJailEvent event) {
+				Guild guild = event.getGuild();
 				Member member = event.getMember();
-				Optional<Member> mod = event.getModerator().or(() -> Optional.of(event.getGuild().getSelfMember()));
+				Optional<Member> mod = event.getModerator().or(() -> Optional.of(guild.getSelfMember()));
+
+				// Send DM message to warned member
+				notifyMember(member, "You have been jailed", Colors.ERROR, "Case ID",
+						event.getCaseID().map(Object::toString).orElse("N/A"), "Reason",
+						'*' + event.getReason().orElseGet(jail::getDefaultReason) + '*')
+						.queue(null, new ErrorHandler().ignore(ErrorResponse.CANNOT_SEND_TO_USER));
 
 				modlog(event.getGuild(), () -> {
 					EmbedBuilder builder = new EmbedBuilder();
@@ -295,11 +349,21 @@ public class CustomJailPlugin extends Plugin implements CommandProvider {
 					builder.setFooter(jail.getEmbedFooter(), EMBED_FOOTER_ICON);
 					return builder.build();
 				}).ifPresent(RestAction::queue);
+
+				// Disconnect member from voice chat
+				Optional.ofNullable(member.getVoiceState()).filter(GuildVoiceState::inAudioChannel)
+						.filter(v -> guild.getSelfMember().hasPermission(v.getChannel(), Permission.VOICE_MOVE_OTHERS))
+						.ifPresent(vcState -> guild.kickVoiceMember(member).queue());
 			}
 
 			@Override
 			public void onMemberUnjail(MemberUnjailEvent event) {
 				Member member = event.getMember();
+
+				// Send DM message to unjailed member
+				notifyMember(member, "You have been unjailed", Colors.NOTICE, "Reason",
+						'*' + event.getReason().orElseGet(jail::getDefaultReason) + '*')
+						.queue(null, new ErrorHandler().ignore(ErrorResponse.CANNOT_SEND_TO_USER));
 
 				modlog(event.getGuild(), () -> {
 					EmbedBuilder builder = new EmbedBuilder();
@@ -323,7 +387,14 @@ public class CustomJailPlugin extends Plugin implements CommandProvider {
 			@Override
 			public void onWarningAdded(WarningAddedEvent event) {
 				event.getModerator().ifPresent(moderator -> {
-					Member member = event.getDetails().member();
+					WarningDetails details = event.getDetails();
+					Member member = details.member();
+
+					// Send DM message to warned member
+					notifyMember(details.member(), "You Have Been Warned", Colors.WARNING, "Case ID",
+							"" + details.caseID(), "Reason",
+							'*' + details.reason().orElseGet(jail::getDefaultReason) + '*')
+							.queue(null, new ErrorHandler().ignore(ErrorResponse.CANNOT_SEND_TO_USER));
 
 					modlog(member.getGuild(), () -> {
 						EmbedBuilder builder = new EmbedBuilder();
@@ -347,34 +418,17 @@ public class CustomJailPlugin extends Plugin implements CommandProvider {
 			}
 
 			@Override
-			public void onJailTimerStart(JailTimerStartEvent event) {
-				event.getModerator().ifPresent(moderator -> {
-					Member member = event.getMember();
-
-					modlog(member.getGuild(), () -> {
-						EmbedBuilder builder = new EmbedBuilder();
-						builder.setColor(Colors.WARNING);
-						builder.setTitle("Started Jail Timer");
-						builder.setThumbnail(member.getEffectiveAvatarUrl());
-
-						// Row 1
-						builder.addField("Member", member.getAsMention(), true);
-						builder.addField("Moderator", moderator.getAsMention(), true);
-
-						// Row 2
-						builder.addField("Reason", event.getStartReason().orElseGet(jail::getDefaultReason), false);
-
-						builder.setTimestamp(Instant.now());
-						builder.setFooter(jail.getEmbedFooter(), EMBED_FOOTER_ICON);
-						return builder.build();
-					}).ifPresent(RestAction::queue);
-				});
-			}
-
-			@Override
 			public void onWarningRemove(WarningRemovedEvent event) {
-				if (event.getModerator().isPresent())
-					modlog(event.getGuild(), () -> {
+				if (event.getModerator().isPresent()) {
+					Guild guild = event.getGuild();
+					WarningDetails details = event.getDetails();
+
+					// Send DM message to member
+					notifyMember(details.member(), "Warning Removed", Colors.NOTICE, "Case ID", "" + details.caseID(),
+							"Reason", '*' + event.getReason().orElseGet(jail::getDefaultReason) + '*')
+							.queue(null, new ErrorHandler().ignore(ErrorResponse.CANNOT_SEND_TO_USER));
+
+					modlog(guild, () -> {
 						EmbedBuilder builder = new EmbedBuilder();
 						builder.setColor(Colors.NOTICE);
 						builder.setTitle("Warning Removed");
@@ -390,6 +444,7 @@ public class CustomJailPlugin extends Plugin implements CommandProvider {
 						builder.setFooter(jail.getEmbedFooter(), EMBED_FOOTER_ICON);
 						return builder.build();
 					}).ifPresent(RestAction::queue);
+				}
 			}
 
 			@Override
@@ -418,6 +473,75 @@ public class CustomJailPlugin extends Plugin implements CommandProvider {
 				}).ifPresent(RestAction::queue);
 			}
 
+			@Override
+			public void onJailTimerStart(JailTimerStartEvent event) {
+				Guild guild = event.getGuild();
+				Member member = event.getMember();
+				Member mod = event.getModerator().orElseGet(guild::getSelfMember);
+
+				String endTime = UnixTimestamp.fromEpochMilli(event.getEndDate().getTime())
+						.getRelativeTimeStringInSeconds();
+				String startReason = event.getStartReason().orElseGet(jail::getDefaultReason);
+
+				// Send DM message to member
+				notifyMember(member, "Started Jail Timer", Colors.NOTICE, "Case ID", "" + event.getDetails().caseid(),
+						"End Date", endTime, "Reason", '*' + startReason + '*')
+						.queue(null, new ErrorHandler().ignore(ErrorResponse.CANNOT_SEND_TO_USER));
+
+				modlog(member.getGuild(), () -> {
+					EmbedBuilder builder = new EmbedBuilder();
+					builder.setColor(Colors.WARNING);
+					builder.setTitle("Started Jail Timer");
+					builder.setThumbnail(member.getEffectiveAvatarUrl());
+
+					// Row 1
+					builder.addField("Member", member.getAsMention(), true);
+					builder.addField("Moderator", mod.getAsMention(), true);
+					builder.addField("End Date", endTime, true);
+
+					// Row 2
+					builder.addField("Reason", startReason, false);
+
+					builder.setTimestamp(Instant.now());
+					builder.setFooter(jail.getEmbedFooter(), EMBED_FOOTER_ICON);
+					return builder.build();
+				}).ifPresent(RestAction::queue);
+			}
+
+			@Override
+			public void onMemberLeaveWhileJailed(MemberLeaveWhileJailedEvent event) {
+				Guild guild = event.getGuild();
+				Member member = event.getMember();
+
+				modlog(guild, () -> {
+					EmbedBuilder builder = new EmbedBuilder();
+					builder.setColor(Colors.WARNING);
+					builder.setTitle("Member left while jailed");
+					builder.setThumbnail(member.getEffectiveAvatarUrl());
+
+					// Row 1
+					builder.addField("Member", member.getAsMention(), true);
+					builder.addField("Warning Level", "" + jail.getWarningLevelForMember(member), true);
+
+					builder.setTimestamp(Instant.now());
+					builder.setFooter(jail.getEmbedFooter(), EMBED_FOOTER_ICON);
+
+					return builder.build();
+				}).ifPresent(RestAction::queue);
+
+				// Check if member should be banned for leaving before punishment was over
+				if (shouldBanOnLeave(guild)) {
+					// Ban member
+					guild.ban(member.getUser(), 0, TimeUnit.SECONDS).reason("Left while jailed")
+							.addCheck(() -> guild.getSelfMember().hasPermission(Permission.BAN_MEMBERS)).queue(v ->
+					// Log to moderation log
+					modlog(guild,
+							() -> Response.error(
+									"Banned " + member.getAsMention() + " for leaving before punishment was over"))
+							.ifPresent(RestAction::queue));
+				}
+			}
+
 		});
 	}
 
@@ -434,7 +558,7 @@ public class CustomJailPlugin extends Plugin implements CommandProvider {
 		if (this.updateRolesToDatabase) {
 			logger.warn("Updating roles to database...");
 			long start = System.nanoTime();
-			WatameBot.getJDA().getGuildCache().forEach(jail::updateRolesToDatabase);
+			WatameBot.getJDA().getGuildCache().forEach(jail::refreshAllMembers);
 			long end = System.nanoTime();
 			logger.warn("Finished updating roles to database in {} seconds",
 					MethodTimer.formatToSeconds(end - start, 2));
@@ -456,6 +580,8 @@ public class CustomJailPlugin extends Plugin implements CommandProvider {
 						.setDefaultPermissions(DefaultMemberPermissions.enabledFor(Permission.ADMINISTRATOR))
 						.addSubcommands(new SubcommandData("configure", "Configure CustomJail")
 								.addOption(OptionType.ROLE, "jail_role", "Role to give when a user is jailed")
+								.addOption(OptionType.BOOLEAN, "ban_on_leave",
+										"Should members be banned if they leave the server while jailed")
 								.addOptions(
 										new OptionData(OptionType.CHANNEL, "jail_channel", "Jail channel")
 												.setChannelTypes(ChannelType.TEXT, ChannelType.GUILD_PRIVATE_THREAD,
@@ -464,13 +590,12 @@ public class CustomJailPlugin extends Plugin implements CommandProvider {
 												.setChannelTypes(ChannelType.TEXT, ChannelType.GUILD_PRIVATE_THREAD,
 														ChannelType.GUILD_PUBLIC_THREAD),
 										new OptionData(OptionType.INTEGER, "warning_time",
-												"Amount of time (in months) warnings should last").setMinValue(1)
-												.setMaxValue(12),
+												"Amount of time (in months) warnings should last")
+												.setRequiredRange(1, 12),
 										new OptionData(OptionType.STRING, "warning_role_prefix",
 												"Prefix for warning roles"),
 										new OptionData(OptionType.INTEGER, "max_warnings",
-												"Max amount of warnings someone can have").setMinValue(0)
-												.setMaxValue(99))),
+												"Max amount of warnings someone can have").setRequiredRange(0, 99))),
 				// ====== Jail Commands ======
 
 				// Jail
@@ -480,7 +605,8 @@ public class CustomJailPlugin extends Plugin implements CommandProvider {
 						.addOptions(new OptionData(OptionType.STRING, "duration", "Amount of time to jail user", true)
 								.addChoices(Arrays.stream(jailingTimes).map(arr -> new Command.Choice(arr[0], arr[1]))
 										.toList()))
-						.addOption(OptionType.STRING, "reason", "Reason for jail")
+						.addOptions(
+								new OptionData(OptionType.STRING, "reason", "Reason for the jailing").setMaxLength(500))
 						.addOption(OptionType.BOOLEAN, "add-warning", "Should this jail result in a warning"),
 
 				// Un-jail
@@ -497,23 +623,27 @@ public class CustomJailPlugin extends Plugin implements CommandProvider {
 				Commands.user("Jail Details").setGuildOnly(true).setDefaultPermissions(perm),
 
 				// ====== Warning Commands ======
-				Commands.user("Warnings").setGuildOnly(true).setDefaultPermissions(perm),
-				Commands.slash("warnings", "Commands that involve warnings").setGuildOnly(true)
-						.setDefaultPermissions(perm).addSubcommands(
+				Commands.user("Warnings").setGuildOnly(true).setDefaultPermissions(perm), Commands
+						.slash("warnings", "Commands that involve warnings").setGuildOnly(true).setDefaultPermissions(
+								perm)
+						.addSubcommands(
 								// Decrease warning level
 								new SubcommandData("decrease", "Decrease a users warning level")
 										.addOption(OptionType.USER, "user", "User to decrease warning level for", true)
 										.addOption(OptionType.STRING, "reason", "Reason for decreasing warning level"),
 
-								// Add warning
-								// new SubcommandData("add", "Add a warning")
-								// .addOption(OptionType.USER, "user", "User to add warning to", true)
-								// .addOption(OptionType.STRING, "reason", "Reason for the warning"),
+								// List warnings
+								new SubcommandData("list", "List a user's warnings").addOption(OptionType.USER, "user",
+										"User to get warnings for", true),
 
-								// Get warnings
-								// new SubcommandData("get", "Get warnings for user").addOption(OptionType.USER,
-								// "user",
-								// "User to get warning from", true),
+								// Add warning
+								new SubcommandData("add", "Add a warning")
+										.addOption(OptionType.USER, "user", "User to add warning to", true)
+										.addOptions(
+												new OptionData(OptionType.STRING, "reason", "Reason for the warning")
+														.setMaxLength(500))
+										.addOption(OptionType.BOOLEAN, "active",
+												"Should this warning count to the member's warning level"),
 
 								// Remove warning
 								new SubcommandData("remove", "Remove a warning")
@@ -521,11 +651,21 @@ public class CustomJailPlugin extends Plugin implements CommandProvider {
 												.setMinValue(0).setMaxValue(Integer.MAX_VALUE))
 										.addOption(OptionType.STRING, "reason", "Reason for warning removal"),
 
+								// Clear member warnings
+								new SubcommandData("clear", "Clear all warnings for a member")
+										.addOption(OptionType.USER, "user", "User to add warning to", true)
+										.addOption(OptionType.STRING, "reason", "Reason for the warning"),
+
 								// Update warning
 								new SubcommandData("update", "Update a warning")
 										.addOption(OptionType.INTEGER, "case-id", "Warning id", true)
-										.addOption(OptionType.STRING, "new-reason", "New warning reason", true)
-										.addOption(OptionType.STRING, "reason", "Reason for warning update")));
+										.addOptions(new OptionData(OptionType.STRING, "new-reason",
+												"New warning reason", true).setMaxLength(500))
+										.addOption(OptionType.STRING, "reason", "Reason for warning update"),
+
+								// Refresh
+								new SubcommandData("reload", "Attempt to fix a member's warning level and timers")
+										.addOption(OptionType.USER, "user", "User to refresh", true)));
 	}
 
 	public IJailSystem getJailSystem() {
@@ -534,12 +674,134 @@ public class CustomJailPlugin extends Plugin implements CommandProvider {
 
 	// =================================================================================================================
 
+	/**
+	 * Send a notification to a {@link Member} with the specified {@code title},
+	 * {@code color} and {@code fields}.
+	 * 
+	 * @param member - member to send the notification to
+	 * @param title  - title of the notification
+	 * @param color  - color of the notification
+	 * @param fields - map containing the content of the notification
+	 * 
+	 * @return Returns a {@link RestAction} that will send the notification
+	 * 
+	 * @throws NullPointerException     Thrown if {@code member} or {@code title} is
+	 *                                  {@code null}
+	 * @throws IllegalArgumentException Thrown if {@code title} is blank
+	 */
+	private RestAction<?> notifyMember(@NotNull Member member, @NotNull String title, int color,
+			@NotNull Map<String, String> fields) {
+		Objects.requireNonNull(member);
+		Objects.requireNonNull(title);
+		if (title.isBlank())
+			throw new IllegalArgumentException("Title must not be empty!");
+
+		// Send DM message to member
+		return member.getUser().openPrivateChannel().flatMap(channel -> {
+			Guild guild = member.getGuild();
+			String field = "**%s: ** %s\n";
+
+			// Build description
+			StringBuilder b = new StringBuilder();
+			b.append(field.formatted("In",
+					MarkdownUtil.maskedLink(guild.getName(), DiscordUtils.getGuildProtocolLink(guild))));
+			fields.forEach((key, value) -> b.append(field.formatted(key, value)));
+
+			// Create embed
+			EmbedBuilder builder = new EmbedBuilder();
+			builder.setColor(color);
+			builder.setTitle(title);
+			builder.setThumbnail(guild.getIconUrl());
+			builder.setDescription(b.toString().trim());
+			builder.setTimestamp(Instant.now());
+			builder.setFooter(jail.getEmbedFooter(), EMBED_FOOTER_ICON);
+
+			// Send message
+			return channel.sendMessageEmbeds(builder.build()).addCheck(channel::canTalk)
+					.addCheck(() -> notifyMember.get(guild, () -> true, PropertyMapping::getAsBoolean));
+		});
+	}
+
+	/**
+	 * Send a notification to a {@link Member} with the specified {@code title},
+	 * {@code color} and {@code fields}.
+	 * <p>
+	 * This method is effectively equivalent to:
+	 * </p>
+	 * 
+	 * <pre>
+	 * Map<String, String> map = new HashMap<>();
+	 * for (int i = 0; i < fields.length; i += 2)
+	 * 	map.put(fields[i], fields[i + 1]);
+	 * return notifyMember(member, title, color, map);
+	 * </pre>
+	 * 
+	 * @param member - member to send the notification to
+	 * @param title  - title of the notification
+	 * @param color  - color of the notification
+	 * @param fields - array containing key value pairs with the content of the
+	 *               notification
+	 * 
+	 * @return Returns a {@link RestAction} that will send the notification
+	 * 
+	 * @throws NullPointerException     Thrown if {@code member}, {@code title} or
+	 *                                  {@code fields} is {@code null}
+	 * @throws IllegalArgumentException Thrown if {@code title} is blank,
+	 *                                  {@code fields} is empty or
+	 *                                  {@code fields.length} is not a multiple of
+	 *                                  two
+	 */
+	private RestAction<?> notifyMember(@NotNull Member member, @NotNull String title, int color,
+			@NotNull String... fields) {
+		Objects.requireNonNull(fields);
+		if (fields.length == 0)
+			throw new IllegalArgumentException("Fields must not be empty!");
+		if ((fields.length & 1) == 1)
+			throw new IllegalArgumentException("Fields must be a multiple of two!");
+		Map<String, String> map = new HashMap<>();
+		for (int i = 0; i < fields.length; i += 2)
+			map.put(fields[i], fields[i + 1]);
+		return notifyMember(member, title, color, map);
+	}
+
+	/**
+	 * Write a notification to the moderation log and combine it with another
+	 * {@link RestAction}.
+	 * <p>
+	 * This is effectively equivalent to:
+	 * </p>
+	 * 
+	 * <pre>
+	 * Optional<RestAction<?>> action2 = modlog(guild, embed);
+	 * return action2.isPresent() ? action2.map(action::and).get() : action;
+	 * </pre>
+	 * 
+	 * @param action - action to combine
+	 * @param guild  - {@link Guild} to send to
+	 * @param embed  - embed containing the notification
+	 * 
+	 * @return If the result of {@link #modlog(Guild, Supplier)} is not empty,
+	 *         returns the provided {@link RestAction} combined with another that
+	 *         will write to the moderation log. Otherwise returns the provided
+	 *         {@code action}
+	 */
+	@NotNull
 	public static RestAction<?> modlog(@NotNull RestAction<?> action, @NotNull Guild guild,
 			@NotNull Supplier<MessageEmbed> embed) {
 		Optional<RestAction<?>> action2 = modlog(guild, embed);
-		return action2.isPresent() ? action2.map(a -> a.and(action)).get() : action;
+		return action2.isPresent() ? action2.map(action::and).get() : action;
 	}
 
+	/**
+	 * Write a notification to the moderation log.
+	 * 
+	 * @param guild - {@link Guild} to send to
+	 * @param embed - embed containing the notification
+	 * 
+	 * @return Returns an {@link Optional} that may contain a {@link RestAction}
+	 *         that will write the notification to the moderation log
+	 */
+	@NotNull
 	public static Optional<RestAction<?>> modlog(@NotNull Guild guild, @NotNull Supplier<MessageEmbed> embed) {
 		return CustomJailPlugin.logChannel.getOr(guild, WatameBot.getLoggingChannel())
 				// As message channel
@@ -577,6 +839,9 @@ public class CustomJailPlugin extends Plugin implements CommandProvider {
 	 *         {@code locked} or {@code archived} and<b> we have</b> permission to
 	 *         {@code access}, {@code send embeds} and {@code send
 	 *         messages}.
+	 * 
+	 * @throws NullPointerException Thrown if {@code hook} or {@code channel} is
+	 *                              {@code null}
 	 */
 	private static boolean isValidChannel(@NotNull InteractionHook hook, @NotNull GuildChannelUnion channel) {
 		Objects.requireNonNull(hook);
@@ -638,6 +903,10 @@ public class CustomJailPlugin extends Plugin implements CommandProvider {
 	@NotNull
 	public static CustomTime getWarningTime(@NotNull Guild guild) {
 		return new CustomTime(warningTime.get(guild, () -> 1, PropertyMapping::getAsInt) + "M");
+	}
+
+	public static boolean shouldBanOnLeave(@NotNull Guild guild) {
+		return banOnLeave.get(guild, () -> false, PropertyMapping::getAsBoolean);
 	}
 
 	// =================================================================================================================

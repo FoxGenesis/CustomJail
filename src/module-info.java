@@ -1,12 +1,13 @@
 module watamebot.customjail {
 	requires transitive quartz;
 	requires transitive watamebot;
-	requires transitive java.sql;
 
 	requires static org.jetbrains.annotations;
 
 	requires com.zaxxer.hikari;
 	requires org.apache.commons.lang3;
+	requires net.dv8tion.jda;
+	requires java.sql;
 	
 	exports net.foxgenesis.customjail;
 	exports net.foxgenesis.customjail.time;

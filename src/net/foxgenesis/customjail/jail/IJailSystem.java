@@ -6,15 +6,16 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
+import net.foxgenesis.customjail.database.Warning;
+import net.foxgenesis.customjail.jail.event.IJailEventBus;
+import net.foxgenesis.customjail.time.CustomTime;
+import net.foxgenesis.customjail.time.UnixTimestamp;
+
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Member;
-import net.foxgenesis.customjail.database.Warning;
-import net.foxgenesis.customjail.jail.event.IJailEventBus;
-import net.foxgenesis.customjail.time.CustomTime;
-import net.foxgenesis.customjail.time.UnixTimestamp;
 
 public interface IJailSystem {
 
@@ -213,17 +214,21 @@ public interface IJailSystem {
 	 * @return Returns {@code true} if the specified warning was removed and
 	 *         {@code false} otherwise
 	 */
-	boolean deleteWarning(Guild guild, int case_id, Optional<Member> moderator, Optional<String> reason);
+	boolean deleteWarning(@NotNull Guild guild, int case_id, @NotNull Optional<Member> moderator,
+			@NotNull Optional<String> reason);
 
 	/**
-	 * Delte all warnings for a {@link Member}.
+	 * Delete all warnings for a {@link Member}.
 	 * 
-	 * @param member - member to delete warnings for
+	 * @param member    - member to delete warnings for
+	 * @param moderator - (optional) moderator that performed this action
+	 * @param reason    - (optional) reason for deletion
 	 * 
 	 * @return Returns {@code true} if all warnings were deleted. {@code false}
 	 *         otherwise.
 	 */
-	boolean deleteWarnings(@NotNull Member member);
+	boolean deleteWarnings(@NotNull Member member, @NotNull Optional<Member> moderator,
+			@NotNull Optional<String> reason);
 
 	/**
 	 * NEED_JAVADOC
@@ -236,8 +241,15 @@ public interface IJailSystem {
 	 * 
 	 * @return
 	 */
-	boolean updateWarningReason(Guild guild, int case_id, Optional<Member> moderator, String newReason,
-			Optional<String> reason);
+	boolean updateWarningReason(@NotNull Guild guild, int case_id, @NotNull Optional<Member> moderator,
+			@NotNull String newReason, @NotNull Optional<String> reason);
+
+	/**
+	 * Refresh a {@link Member} in the system.
+	 * 
+	 * @param member - member to refresh
+	 */
+	public void refreshMember(@NotNull Member member);
 
 	/**
 	 * NEED_JAVADOC
@@ -249,7 +261,7 @@ public interface IJailSystem {
 	 * @throws InternalException
 	 */
 	@NotNull
-	CompletableFuture<Void> updateRolesToDatabase(@NotNull Guild guild) throws InternalException;
+	CompletableFuture<Void> refreshAllMembers(@NotNull Guild guild) throws InternalException;
 
 	/**
 	 * Check if the specified {@code case ID} is valid.

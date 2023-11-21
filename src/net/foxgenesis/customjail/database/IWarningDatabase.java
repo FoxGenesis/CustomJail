@@ -1,6 +1,9 @@
 package net.foxgenesis.customjail.database;
 
+import java.util.Collection;
 import java.util.Optional;
+
+import net.foxgenesis.customjail.jail.WarningDetails;
 
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Member;
@@ -17,6 +20,8 @@ public interface IWarningDatabase {
 	int getWarningLevelForMember(Member member);
 
 	Optional<Warning> getWarning(Guild guild, int case_id);
+	
+	Collection<Warning> getWarnings(Member member);
 
 	int getTotalWarnings(Member member);
 
@@ -25,6 +30,9 @@ public interface IWarningDatabase {
 	Warning[] getWarningsPageForMember(long guildID, long memberID, int itemsPerPage, int page);
 
 	int addWarningForMember(Member member, Member moderator, String reason, boolean active);
+
+	Transaction<WarningDetails> createWarningTransaction(Member member, Member moderator, String reason,
+			boolean active);
 
 	int decreaseAndGetWarningLevel(Member member);
 

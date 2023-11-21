@@ -8,6 +8,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
@@ -22,20 +23,6 @@ import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 
-import org.jetbrains.annotations.NotNull;
-import org.quartz.SchedulerException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import net.dv8tion.jda.api.EmbedBuilder;
-import net.dv8tion.jda.api.Permission;
-import net.dv8tion.jda.api.entities.Guild;
-import net.dv8tion.jda.api.entities.Member;
-import net.dv8tion.jda.api.entities.Role;
-import net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel;
-import net.dv8tion.jda.api.interactions.components.buttons.Button;
-import net.dv8tion.jda.api.requests.RestAction;
-import net.dv8tion.jda.api.requests.restaction.MessageCreateAction;
 import net.foxgenesis.customjail.CustomJailPlugin;
 import net.foxgenesis.customjail.SchedulerSettings;
 import net.foxgenesis.customjail.database.IWarningDatabase;
@@ -44,6 +31,7 @@ import net.foxgenesis.customjail.jail.event.IJailEventBus;
 import net.foxgenesis.customjail.jail.event.JailEventBus;
 import net.foxgenesis.customjail.jail.event.impl.JailTimerStartEvent;
 import net.foxgenesis.customjail.jail.event.impl.MemberJailEvent;
+import net.foxgenesis.customjail.jail.event.impl.MemberLeaveWhileJailedEvent;
 import net.foxgenesis.customjail.jail.event.impl.MemberUnjailEvent;
 import net.foxgenesis.customjail.jail.event.impl.WarningAddedEvent;
 import net.foxgenesis.customjail.jail.event.impl.WarningReasonUpdateEvent;
@@ -57,7 +45,24 @@ import net.foxgenesis.customjail.util.Utilities;
 import net.foxgenesis.util.resource.ModuleResource;
 import net.foxgenesis.watame.util.Colors;
 
-public class JailSystem implements Closeable, IJailSystem {
+import org.jetbrains.annotations.NotNull;
+import org.quartz.SchedulerException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import net.dv8tion.jda.api.EmbedBuilder;
+import net.dv8tion.jda.api.Permission;
+import net.dv8tion.jda.api.entities.Guild;
+import net.dv8tion.jda.api.entities.Member;
+import net.dv8tion.jda.api.entities.Role;
+import net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel;
+import net.dv8tion.jda.api.events.guild.member.GuildMemberRemoveEvent;
+import net.dv8tion.jda.api.hooks.ListenerAdapter;
+import net.dv8tion.jda.api.interactions.components.buttons.Button;
+import net.dv8tion.jda.api.requests.RestAction;
+import net.dv8tion.jda.api.requests.restaction.MessageCreateAction;
+
+public class JailSystem extends ListenerAdapter implements Closeable, IJailSystem {
 	private static final Logger logger = LoggerFactory.getLogger(JailSystem.class);
 
 	private static final String EMBED_FOOTER = "via Custom Jail";
@@ -328,7 +333,7 @@ public class JailSystem implements Closeable, IJailSystem {
 		if (newLvl > 0) {
 			CustomTime time = CustomJailPlugin.getWarningTime(member.getGuild());
 			if (!scheduler.rescheduleWarningTimer(member, time))
-				if (!scheduler.createWarningTimer(member, time)) {
+				if (!(scheduler.isWarningTimerRunning(member) || scheduler.isJailed(member))) {
 					handleError(err, InternalException::new, "Failed to reschedule warning timer", null);
 					return;
 				}
@@ -378,7 +383,7 @@ public class JailSystem implements Closeable, IJailSystem {
 
 				// Update warning roles and timer
 				Utilities.Warnings.updateWarningLevel(member, newLevel, Optional.empty()).queue();
-				if (!scheduler.isWarningTimerRunning(member))
+				if (!(scheduler.isWarningTimerRunning(member) || scheduler.isJailed(member)))
 					scheduler.createWarningTimer(member, CustomJailPlugin.getWarningTime(member.getGuild()));
 			}
 		}
@@ -430,8 +435,37 @@ public class JailSystem implements Closeable, IJailSystem {
 	}
 
 	@Override
-	public boolean deleteWarnings(Member member) {
-		throw new UnsupportedOperationException("Not yet implemented");
+	public boolean deleteWarnings(Member member, Optional<Member> moderator, Optional<String> reason) {
+		Collection<Warning> warnings = database.getWarnings(member);
+
+		// Fail on no warnings
+		if (warnings.isEmpty())
+			return false;
+
+		// Delete all warnings
+		if (database.deleteWarnings(member)) {
+
+			// Check if there were any active warnings
+			if (warnings.stream().anyMatch(Warning::active)) {
+				// Get new level
+				int newLevel = getWarningLevelForMember(member);
+
+				// Remove warning timer if no more active warnings left
+				if (newLevel == 0 && isWarningTimerRunning(member))
+					scheduler.removeWarningTimer(member);
+
+				// Update warning roles
+				Utilities.Warnings.updateWarningLevel(member, newLevel, Optional.empty()).queue();
+			}
+
+			// Fire warning removal events for all warnings
+			warnings.forEach(warning -> bus.fireEvent(
+					new WarningRemovedEvent(WarningDetails.fromData(member.getJDA(), warning), moderator, reason)));
+
+			return true;
+		}
+
+		return false;
 	}
 
 	/**
@@ -517,12 +551,44 @@ public class JailSystem implements Closeable, IJailSystem {
 	}
 
 	@Override
-	public CompletableFuture<Void> updateRolesToDatabase(Guild guild) {
-		CompletableFuture<Void> cf = new CompletableFuture<>();
-		logger.warn("Updating roles to database in {}", guild);
-
+	public void refreshMember(Member member) {
+		Guild guild = member.getGuild();
 		Member self = guild.getSelfMember();
 		CustomTime warningTime = CustomJailPlugin.getWarningTime(guild);
+		List<Role> warningRoles = CustomJailPlugin.getWarningRoles(guild);
+
+		// Check if member has a warning role
+		boolean hasWarningRole = false;
+		for (Role r : member.getRoles())
+			if (warningRoles.contains(r))
+				hasWarningRole = true;
+
+		// Refresh member if warning role was found
+		if (hasWarningRole) {
+			int databaseLevel = getWarningLevelForMember(member);
+			int roleLevel = CustomJailPlugin.getWarningLevelFromRoles(member);
+
+			if (databaseLevel == roleLevel)
+				return;
+
+			if (databaseLevel < roleLevel) {
+				for (int i = databaseLevel; i < roleLevel; i++)
+					addWarningForMember(member, self, Optional.of("Fixing Warning Levels"), true, true);
+			}
+
+			if (!(scheduler.isWarningTimerRunning(member) || scheduler.isJailed(member))) {
+				if (scheduler.createWarningTimer(member, warningTime))
+					bus.fireEvent(new WarningTimerStartEvent(member, scheduler.getWarningEndDate(member)));
+			}
+
+			Utilities.Warnings.updateWarningLevel(member, getWarningLevelForMember(member), Optional.empty()).queue();
+		}
+	}
+
+	@Override
+	public CompletableFuture<Void> refreshAllMembers(Guild guild) {
+		CompletableFuture<Void> cf = new CompletableFuture<>();
+		logger.warn("Updating roles to database in {}", guild);
 		List<Role> warningRoles = CustomJailPlugin.getWarningRoles(guild);
 
 		guild.findMembers(m -> {
@@ -533,32 +599,34 @@ public class JailSystem implements Closeable, IJailSystem {
 		}).onSuccess(members -> {
 			logger.warn("Found {} members with warning roles in {}", members.size(), guild);
 			try {
-				members.forEach(member -> {
-					int databaseLevel = getWarningLevelForMember(member);
-					int roleLevel = CustomJailPlugin.getWarningLevelFromRoles(member);
-
-					if (databaseLevel == roleLevel)
-						return;
-
-					if (databaseLevel < roleLevel) {
-						for (int i = databaseLevel; i < roleLevel; i++)
-							addWarningForMember(member, self, Optional.of("Fixing Warning Levels"), true, true);
-					}
-
-					if (!scheduler.isWarningTimerRunning(member)) {
-						if (scheduler.createWarningTimer(member, warningTime))
-							bus.fireEvent(new WarningTimerStartEvent(member, scheduler.getWarningEndDate(member)));
-					}
-
-					Utilities.Warnings.updateWarningLevel(member, getWarningLevelForMember(member), Optional.empty())
-							.queue();
-				});
+				members.forEach(this::refreshMember);
 				cf.complete(null);
 			} catch (Exception e) {
 				cf.completeExceptionally(e);
 			}
 		}).onError(err -> cf.completeExceptionally(err));
 		return cf;
+	}
+
+	@Override
+	public void onGuildMemberRemove(GuildMemberRemoveEvent event) {
+		Member member = event.getMember();
+
+		// Check if member is cached
+		if (member == null)
+			return;
+
+		// Check if member is jailed
+		if (!isJailed(member))
+			return;
+
+		try {
+			// Member left while jailed, fire event
+			getJailDetails(member).map(details -> new JailDetails(member, details))
+					.map(MemberLeaveWhileJailedEvent::new).ifPresent(bus::fireEvent);
+		} catch (InternalException e) {
+			logger.error("Error while getting jail details", e);
+		}
 	}
 
 	@Override
