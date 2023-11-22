@@ -2,6 +2,11 @@ package net.foxgenesis.customjail.timer;
 
 import java.util.Optional;
 
+import net.foxgenesis.customjail.jail.IJailSystem;
+import net.foxgenesis.customjail.jail.IJailSystem.ErrorHandler;
+import net.foxgenesis.watame.State;
+import net.foxgenesis.watame.WatameBot;
+
 import org.quartz.Job;
 import org.quartz.JobDataMap;
 import org.quartz.JobExecutionContext;
@@ -13,10 +18,6 @@ import org.slf4j.LoggerFactory;
 
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Member;
-import net.foxgenesis.customjail.jail.IJailSystem;
-import net.foxgenesis.customjail.jail.IJailSystem.ErrorHandler;
-import net.foxgenesis.watame.WatameBot;
-import net.foxgenesis.watame.WatameBot.State;
 
 public class WarningTimer implements Job {
 
@@ -43,16 +44,16 @@ public class WarningTimer implements Job {
 		}
 
 		// Wait for the system to be in a ready state
-		while (WatameBot.INSTANCE.getState() != State.RUNNING)
+		while (WatameBot.getState() != State.RUNNING)
 			Thread.onSpinWait();
 
 		long guildID = data.getLongValue("guild-id");
 
-		for (String id : WatameBot.INSTANCE.getJDA().getUnavailableGuilds())
+		for (String id : WatameBot.getJDA().getUnavailableGuilds())
 			if (id.equals("" + guildID))
 				error("Guild " + guildID + " is unavailable!");
 
-		Guild guild = WatameBot.INSTANCE.getJDA().getGuildById(guildID);
+		Guild guild = WatameBot.getJDA().getGuildById(guildID);
 
 		if (guild == null) {
 			logger.error("Failed to find guild [{}]. Trying again...", guildID);
@@ -64,8 +65,8 @@ public class WarningTimer implements Job {
 		Member member = guild.retrieveMemberById(memberID).complete();
 
 		if (member == null) {
-			logger.error("Failed to find member [{}] from guild [{}]. Trying again...", memberID, guildID);
-			throw error("Unable to find member with id " + memberID);
+			logger.warn("Member [{}] from {} is no longer in the server. Skipping...", memberID, guild);
+			return;
 		}
 
 		jail.decreaseWarningLevel(member, Optional.empty(), Optional.empty(), (oldLevel, newLevel) -> {

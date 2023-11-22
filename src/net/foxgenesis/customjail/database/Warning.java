@@ -4,12 +4,15 @@ import java.sql.Timestamp;
 import java.util.regex.MatchResult;
 import java.util.regex.Pattern;
 
-public record Warning(long guildID, long memberID, String reason, String moderator, long time, int caseId,
+public record Warning(long guildID, long memberID, long moderator, String reason, long time, int caseId,
 		boolean active) {
-	
-	public Warning(long guildID, long memberID, String reason, String moderator, Timestamp timestamp, int caseID, boolean active) {
-		this(guildID, memberID, reason, moderator, timestamp.getTime(), caseID, active);
+
+	@SuppressWarnings("exports")
+	public Warning(long guildID, long memberID, long moderator, String reason, Timestamp timestamp, int caseID,
+			boolean active) {
+		this(guildID, memberID, moderator, reason, timestamp.getTime(), caseID, active);
 	}
+
 	private static final Pattern externalPattern = Pattern.compile("%([a-zA-Z0-9]+)%");
 
 	public String toExternalFormat(String format) {

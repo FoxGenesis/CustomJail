@@ -25,6 +25,7 @@ import net.foxgenesis.watame.util.Colors;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.slf4j.LoggerFactory;
 
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.entities.Guild;
@@ -47,6 +48,7 @@ import net.dv8tion.jda.api.interactions.components.buttons.ButtonStyle;
 import net.dv8tion.jda.api.interactions.components.selections.SelectMenu;
 import net.dv8tion.jda.api.interactions.components.selections.SelectOption;
 import net.dv8tion.jda.api.interactions.components.selections.StringSelectMenu;
+import net.dv8tion.jda.api.requests.RestAction;
 import net.dv8tion.jda.api.requests.restaction.WebhookMessageEditAction;
 
 public class JailFrontend extends ListenerAdapter {
@@ -121,8 +123,9 @@ public class JailFrontend extends ListenerAdapter {
 						return;
 					}
 
-					MessageEmbed embed = new JailEmbed(null).setMember(member).build();
-					Button addWarning = jail.getWarningLevelForMember(member) >= CustomJailPlugin.getMaxWarnings(guild)
+					int currentLevel = jail.getWarningLevelForMember(member);
+					MessageEmbed embed = new JailEmbed(null).setMember(member).setCurrentLevel(currentLevel).build();
+					Button addWarning = currentLevel >= CustomJailPlugin.getMaxWarnings(guild)
 							? Button.danger("add-warning", "Max Warning Level Reached").asDisabled()
 							: addWarningOn;
 					Button jailButton = Button.danger(wrapInteraction("jailuser", member), "Jail").asDisabled();
@@ -209,6 +212,24 @@ public class JailFrontend extends ListenerAdapter {
 			return;
 
 		switch (event.getFullCommandName()) {
+			case "warnings list" -> {
+				validateMember(event, () -> event.getOption("user", OptionMapping::getAsMember), (e, guild, member) -> {
+					event.deferReply(true).queue();
+
+					// Create warning embed
+					WarningsEmbed embed = createWarningsEmbedForMember(null, member, 1);
+					int page = embed.getPage();
+
+					// Build response
+					event.getHook().editOriginalEmbeds(embed.build()).setReplace(true)
+							.setActionRow(
+									Button.primary(wrapInteraction("warnings", member, "" + (page - 1)), "\u25C0")
+											.withDisabled(page - 1 <= 0),
+									Button.primary(wrapInteraction("warnings", member, "" + (page + 1)), "\u25B6")
+											.withDisabled(page + 1 > embed.getMaxPage()))
+							.queue();
+				});
+			}
 			case "warnings decrease" -> {
 				event.deferReply(true).queue();
 
@@ -245,14 +266,29 @@ public class JailFrontend extends ListenerAdapter {
 						hook.editOriginalEmbeds(Response.error("Failed to remove warning")).queue();
 				}, () -> hook.editOriginalEmbeds(Response.error("No warning with case ID")).queue());
 			}
-			case "warnings update" -> {
+			case "warnings clear" -> {
+				InteractionHook hook = event.getHook();
+				Member member = event.getOption("user", OptionMapping::getAsMember);
+				Member moderator = event.getMember();
+				Optional<String> reason = Optional.ofNullable(event.getOption("reason", OptionMapping::getAsString));
+
 				event.deferReply(true).queue();
 
+				if (jail.deleteWarnings(member, Optional.of(moderator), reason))
+					hook.editOriginalEmbeds(Response.success("Removed all warnings for " + member.getAsMention()))
+							.queue();
+				else
+					hook.editOriginalEmbeds(Response.error("Failed to remove all warnings! Please try again later."))
+							.queue();
+			}
+			case "warnings update" -> {
 				InteractionHook hook = event.getHook();
 				Guild guild = event.getGuild();
 				int caseID = event.getOption("case-id", OptionMapping::getAsInt);
 				String newReason = event.getOption("new-reason", OptionMapping::getAsString);
 				Optional<String> reason = Optional.ofNullable(event.getOption("reason", OptionMapping::getAsString));
+
+				event.deferReply(true).queue();
 
 				// Check if case id is valid
 				if (!jail.isValidCaseID(caseID))
@@ -269,6 +305,74 @@ public class JailFrontend extends ListenerAdapter {
 				// Failed to update reason
 				else
 					hook.editOriginalEmbeds(Response.error("Failed to update warning")).queue();
+			}
+			case "warnings add" -> {
+				InteractionHook hook = event.getHook();
+				Member member = event.getOption("user", OptionMapping::getAsMember);
+				Member moderator = event.getMember();
+				Optional<String> reason = Optional.ofNullable(event.getOption("reason", OptionMapping::getAsString));
+				boolean active = event.getOption("active", false, OptionMapping::getAsBoolean);
+
+				// Do not allow operations on self
+				if (moderator.equals(member)) {
+					event.replyEmbeds(Response.error("You are unable to warn yourself")).setEphemeral(true).queue();
+					return;
+				}
+
+				// Ensure the member can interact with the member
+				if (!moderator.canInteract(member)) {
+					event.replyEmbeds(Response.error("You are unable to interact with the specified user"))
+							.setEphemeral(true).queue();
+					return;
+				}
+
+				// Ensure the member is a human
+				if (member.getUser().isBot() || member.getUser().isSystem()) {
+					event.replyEmbeds(Response.error("Unable to warn bot and system accounts")).setEphemeral(true)
+							.queue();
+					return;
+				}
+
+				event.deferReply(true).queue();
+				try {
+					// Add warning
+					int caseID = jail.addWarningForMember(member, moderator, reason, active);
+
+					// Check for failed insert
+					if (caseID == -1)
+						hook.editOriginalEmbeds(Response.error("Failed to add warning")).queue();
+
+					// Send success message
+					else {
+						EmbedBuilder b = new EmbedBuilder();
+						b.setColor(Colors.SUCCESS);
+						b.setDescription("Added warning for %s.\n**Case ID: **%d\n**Reason:** *%s*"
+								.formatted(member.getAsMention(), caseID, reason.orElseGet(jail::getDefaultReason)));
+
+						b.setFooter(jail.getEmbedFooter());
+						hook.editOriginalEmbeds(b.build()).queue();
+					}
+
+				} catch (Exception e) {
+					hook.editOriginalEmbeds(Response.error("Failed to add warning because of an internal error"))
+							.queue();
+					LoggerFactory.getLogger(JailFrontend.class).error("Failed to add warning for " + member, e);
+				}
+			}
+			case "warnings reload" -> {
+				InteractionHook hook = event.getHook();
+				Member member = event.getOption("user", OptionMapping::getAsMember);
+
+				event.deferReply(true).queue();
+
+				try {
+					jail.refreshMember(member);
+					hook.editOriginalEmbeds(Response.success("Refreshed " + member.getAsMention())).queue();
+				} catch (Exception e) {
+					hook.editOriginalEmbeds(Response.error("Failed to refresh member because of an internal error"))
+							.queue();
+					LoggerFactory.getLogger(JailFrontend.class).error("Failed to refresh " + member, e);
+				}
 			}
 
 			// ========================================================================================
@@ -309,15 +413,15 @@ public class JailFrontend extends ListenerAdapter {
 						err -> error(hook, err));
 			}
 			case "unjail" -> {
-				event.deferReply(true).queue();
-
 				InteractionHook hook = event.getHook();
 				Member member = event.getOption("user", OptionMapping::getAsMember);
 				Optional<Member> moderator = Optional.of(event.getMember());
 				Optional<String> reason = Optional.ofNullable(event.getOption("reason", OptionMapping::getAsString));
 
+				event.deferReply(true).queue();
+
 				jail.unjail(member, moderator, reason,
-						() -> hook.editOriginalEmbeds(Response.success("Unjailed " + member.getAsMention())),
+						() -> hook.editOriginalEmbeds(Response.success("Unjailed " + member.getAsMention())).queue(),
 						err -> error(hook, err));
 			}
 			case "forcestart" -> {
@@ -329,8 +433,10 @@ public class JailFrontend extends ListenerAdapter {
 				Optional<String> reason = Optional.ofNullable(event.getOption("reason", OptionMapping::getAsString));
 
 				jail.startJailTimer(member, moderator, reason,
-						timeLeft -> hook.editOriginalEmbeds(
-								Response.success("**Time Remaining:** " + timeLeft.getRelativeTimeStringInSeconds())),
+						timeLeft -> hook
+								.editOriginalEmbeds(Response
+										.success("**Time Remaining:** " + timeLeft.getRelativeTimeStringInSeconds()))
+								.queue(),
 						err -> error(hook, err));
 			}
 		}
@@ -350,7 +456,7 @@ public class JailFrontend extends ListenerAdapter {
 				switch (id) {
 					case "forcestart" -> {
 						if (jail.isJailTimerRunning(member)) {
-							hook.editOriginalEmbeds(Response.error("Timer is already running")).queue();
+							event.replyEmbeds(Response.error("Timer is already running")).queue();
 							return;
 						}
 						// Display reason modal
@@ -358,7 +464,7 @@ public class JailFrontend extends ListenerAdapter {
 					}
 					case "unjail" -> {
 						if (!jail.isJailed(member)) {
-							hook.editOriginalEmbeds(Response.error("Member is not jailed")).queue();
+							event.replyEmbeds(Response.error("Member is not jailed")).queue();
 							return;
 						}
 						// Display reason modal
@@ -444,8 +550,13 @@ public class JailFrontend extends ListenerAdapter {
 				}
 			},
 					// Unable to find member button was wrapped to
-					() -> event.editButton(event.getButton().asDisabled())
-							.and(event.replyEmbeds(Response.error("User does not exist"))).queue());
+					() -> {
+						MessageEmbed errorMsg = Response.error("User does not exist!");
+						RestAction<?> edit = (event.isAcknowledged()
+								? event.getHook().editOriginalEmbeds(errorMsg).setReplace(true)
+								: event.replyEmbeds(errorMsg).setEphemeral(true));
+						event.editButton(event.getButton().asDisabled()).flatMap(o -> edit).queue();
+					});
 		}))
 			return;
 

@@ -12,13 +12,16 @@ public class JailEmbed extends ACustomEmbed {
 		super(messageEmbed);
 		builder.setTitle("Jail User");
 		builder.setFooter("via Custom Jail", CustomJailPlugin.EMBED_FOOTER_ICON);
-		// builder.setThumbnail("https://media.tenor.com/JwnY0jHr7_MAAAAi/bonk-cat-ouch.gif");
 	}
 
 	public JailEmbed setMember(Member member) {
 		builder.setAuthor(member.getEffectiveName(), null, member.getEffectiveAvatarUrl()).setColor(member.getColor());
 		replaceField(new Field("User", member.getAsMention(), true));
-		addBlank();
+		return this;
+	}
+	
+	public JailEmbed setCurrentLevel(int currentLevel) {
+		replaceField(new Field("Warning Level", "" + currentLevel, true));
 		return this;
 	}
 
