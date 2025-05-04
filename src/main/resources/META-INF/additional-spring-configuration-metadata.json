@@ -1,0 +1,7 @@
+{"properties": [
+  {
+    "name": "customjail.timings",
+    "type": "java.lang.String",
+    "description": "Jail duration options"
+  }
+]}

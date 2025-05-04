@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+	xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+	xmlns:sec="https://www.thymeleaf.org/thymeleaf-extras-springsecurity6"
+	xmlns:wat="">
+<head th:fragment="head">
+
+</head>
+<body th:fragment="content">
+	<form id="customJailConfigurationn" class="needs-validation confirm-save" th:action="@{''}" th:object="${customJailConfiguration}"
+		method="post">
+		<fieldset id="enabledField">
+			<legend class="form-check form-check-reverse form-switch img-link gap-2">
+				<label class="form-check-label text-start" for="enabled">
+					<th:block th:text="#{customjail.enabled}">Enabled</th:block>
+					<a class="anchor-link" href="#enabledField"></a>
+				</label>
+				<input class="form-check-input disable-field" type="checkbox"
+					role="switch" th:field="*{enabled}" data-target="#enabledField">
+			</legend>
+			<div class="fieldset-control">
+				<div>
+					<p class="form-control-plaintext" th:text="#{customjail.jailChannel.description}">Section description</p>
+					<div class="input-group" th:classappend="${#fields.hasErrors('jailChannel')} ? has-validation">
+						<span class="input-group-text me-0 ci ci-text" data-show-tooltip id="jailTextChannelIcon"></span>
+						<select wat:channels="text,guild_public_thread,guild_private_thread" th:field="*{jailChannel}"
+							aria-describedby="jailTextChannelIcon jailChannelClearSelection" th:classappend="${#fields.hasErrors('jailChannel')} ? is-invalid" required>
+						</select>
+						<button id="jailChannelClearSelection" class="btn btn-secondary-danger bi bi-x-lg clear-selection" type="button" th:title="#{web.clear-selection}" data-target="#jailChannel"></button>
+						<div class="invalid-feedback"
+								th:errors="*{jailChannel}"></div>
+					</div>
+				</div>
+				<div>
+					<p class="form-control-plaintext" th:text="#{customjail.jailRole.description}">Section description</p>
+					<div class="input-group" th:classappend="${#fields.hasErrors('jailRole')} ? has-validation">
+						<span class="input-group-text me-0 bi bi-tag-fill" id="jailRoleIcon" title="Role" data-show-tooltip></span>
+						<select wat:roles th:field="*{jailRole}"
+							aria-describedby="jailRoleIcon jailRoleClearSelection" th:classappend="${#fields.hasErrors('jailRole')} ? is-invalid" required>
+						</select>
+						<button id="jailRoleClearSelection" class="btn btn-secondary-danger bi bi-x-lg clear-selection" type="button" th:title="#{web.clear-selection}" data-target="#jailRole"></button>
+						<div class="invalid-feedback"
+								th:errors="*{jailRole}"></div>
+					</div>
+				</div>
+				<div>
+					<p class="form-control-plaintext" th:text="#{customjail.logChannel.description}">Section description</p>
+					<div class="input-group" th:classappend="${#fields.hasErrors('logChannel')} ? has-validation">
+						<span class="input-group-text me-0 ci ci-text" data-show-tooltip id="textChannelIcon"></span>
+						<select wat:channels="text,guild_public_thread,guild_private_thread" th:field="*{logChannel}"
+							aria-describedby="textChannelIcon logClearSelection" th:classappend="${#fields.hasErrors('logChannel')} ? is-invalid">
+						</select>
+						<button id="logClearSelection" class="btn btn-secondary-danger bi bi-x-lg clear-selection" type="button" th:title="#{web.clear-selection}" data-target="#logChannel"></button>
+						<div class="invalid-feedback"
+								th:errors="*{logChannel}"></div>
+					</div>
+				</div>
+				<div class="row g-3 align-items-center justify-content-between">
+					<div class="col-md-auto">
+						<label for="strikePercentage" class="col-form-label" th:text="#{customjail.warningTime}"></label>
+						
+						<div class="form-floating">
+							<input class="form-control" type="text" maxlength="32" th:placeholder="#{customjail.warningTime}" th:field="*{warningTime}" required pattern='^(?:\d+[YyMWwDdHhmsS])+$'>
+							<label for="floatingInput" th:text="#{customjail.warningTime}"></label>
+							<div class="invalid-feedback" th:errors="*{warningTime}"></div>
+						</div>
+<!-- 						<div class="input-group" th:classappend="${#fields.hasErrors('warningTime')} ? has-validation"> -->
+<!-- 							<input type="number" class="form-control" min="1" max="12" th:field="*{warningTime}" th:classappend="${#fields.hasErrors('warningTime')} ? is-invalid" aria-describedby="monthsText" required> -->
+<!-- 							<span class="input-group-text" id="monthsText" th:text="#{customjail.months}"></span> -->
+<!-- 							<div class="invalid-feedback" th:errors="*{warningTime}"></div> -->
+<!-- 						</div> -->
+					</div>
+					<div class="col-md-auto">
+						<label for="notifyMember" class="col-form-label" th:text="#{customjail.notifyMember}"></label>
+						<div class="form-switch">
+							<input class="form-check-input" type="checkbox" role="switch" th:field="*{notifyMember}" th:classappend="${#fields.hasErrors('notifyMember')} ? is-invalid">
+							<div class="invalid-feedback" th:errors="*{notifyMember}"></div>
+						</div>
+					</div>
+<!-- 					<div class="col-md-auto"> -->
+<!-- 						<label for="banOnLeave" class="col-form-label" th:text="#{customjail.banOnLeave}"></label> -->
+<!-- 						<div class="form-switch"> -->
+<!-- 							<input class="form-check-input" type="checkbox" role="switch" th:field="*{banOnLeave}" th:classappend="${#fields.hasErrors('banOnLeave')} ? is-invalid"> -->
+<!-- 							<div class="invalid-feedback" th:errors="*{banOnLeave}"></div> -->
+<!-- 						</div> -->
+<!-- 					</div> -->
+				</div>
+			</div>
+		</fieldset>
+		<div class="clearfix px-3">
+			<button class="btn btn-primary col-12 col-lg-auto float-end" type="submit" th:text="#{web.save}">Save</button>
+		</div>
+	</form>
+</body>
+</html>
