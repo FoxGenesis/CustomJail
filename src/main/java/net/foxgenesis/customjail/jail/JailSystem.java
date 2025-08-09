@@ -55,14 +55,15 @@ public interface JailSystem extends WarningSystem {
 	 * @param time       - duration of the jail
 	 * @param reason     - (optional) reason for being jailed
 	 * @param addWarning - should a warning be added to the member for this jailing
+	 * @param anonymous  - should the jailing be listed as anonymous
 	 * @throws AlreadyJailedException Thrown if the specified member is already
 	 *                                jailed
 	 * @see #unjail(Member, Member, String)
 	 * @see #unjail(long, long, Member, String)
 	 * @see #startJailTimer(Member, Member, String)
 	 */
-	void jail(Member member, Member moderator, CustomTime time, @Nullable String reason, boolean addWarning)
-			throws AlreadyJailedException;
+	void jail(Member member, Member moderator, CustomTime time, @Nullable String reason, boolean addWarning,
+			boolean anonymous) throws AlreadyJailedException;
 
 	/**
 	 * Unjail a member in a guild

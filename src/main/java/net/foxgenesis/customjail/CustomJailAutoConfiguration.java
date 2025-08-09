@@ -4,20 +4,24 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Set;
 import java.util.function.Function;
 
 import org.quartz.Scheduler;
+import org.quartz.simpl.CascadingClassLoadHelper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
+import org.springframework.boot.autoconfigure.quartz.SchedulerFactoryBeanCustomizer;
 import org.springframework.context.MessageSource;
 import org.springframework.context.NoSuchMessageException;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
+import org.springframework.scheduling.quartz.SchedulerFactoryBean;
 
 import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.interactions.DiscordLocale;
@@ -49,14 +53,22 @@ import net.foxgenesis.watame.plugin.WatamePlugin;
 @EnableJpaRepositories
 @SpringJDAAutoConfiguration
 @WatamePlugin(id = "customjail")
-public class CustomJailAutoConfiguration{
+public class CustomJailAutoConfiguration implements SchedulerFactoryBeanCustomizer {
+	
+	@Override
+	public void customize(SchedulerFactoryBean s) {
+		Properties properties = new Properties();
+		properties.setProperty("org.quartz.scheduler.classLoadHelper.class", CascadingClassLoadHelper.class.getName());
+		properties.setProperty("org.quartz.jobStore.useProperties", "" + true);
+		s.setQuartzProperties(properties);
+	}
 
 	@Bean
 	@ConditionalOnMissingBean
 	@Permissions({ Permission.MANAGE_ROLES, Permission.VOICE_MOVE_OTHERS, Permission.MESSAGE_EMBED_LINKS,
 			Permission.MESSAGE_SEND })
 	JailSystem defaultJailSystem(
-			@Value("${customjail.timings:30m,1h,5h,12h,1D,2D,3D,1W,2W,1M,2M,3M}") String[] timings) {
+			@Value("${customjail.timings:5s,30m,1h,5h,12h,1D,2D,3D,1W,2W,1M,2M,3M}") String[] timings) {
 		return new JailSystemImpl(timings);
 	}
 
@@ -70,14 +82,6 @@ public class CustomJailAutoConfiguration{
 	JailFrontend jailFrontend(JailSystem system) {
 		return new JailFrontend(system);
 	}
-
-//	@Override
-//	public void customize(SchedulerFactoryBean s) {
-//		Properties properties = new Properties();
-//		properties.setProperty("org.quartz.scheduler.classLoadHelper.class", CascadingClassLoadHelper.class.getName());
-//		properties.setProperty("org.quartz.jobStore.useProperties", "" + true);
-//		s.setQuartzProperties(properties);
-//	}
 
 	@Bean
 	GlobalCommandProvider customjailCommands(JailSystem system, MessageSource source) {
@@ -118,7 +122,8 @@ public class CustomJailAutoConfiguration{
 											.addChoices(choices))
 							.addOptions(new OptionData(OptionType.STRING, "reason", "Reason for the jailing")
 									.setMaxLength(500))
-							.addOption(OptionType.BOOLEAN, "add-warning", "Should this jail result in a warning"),
+							.addOption(OptionType.BOOLEAN, "add-warning", "Should this jail result in a warning")
+							.addOption(OptionType.BOOLEAN, "anonymous", "Should this jailing be listed as anonymous"),
 
 					// Un-jail
 					slash("unjail", "Unjail a user", perm, localization)

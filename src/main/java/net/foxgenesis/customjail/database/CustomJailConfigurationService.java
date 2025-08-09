@@ -2,7 +2,6 @@ package net.foxgenesis.customjail.database;
 
 import java.util.Comparator;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
@@ -27,27 +26,41 @@ public class CustomJailConfigurationService {
 	public Set<Long> getManagedRoles(Guild guild) {
 		return get(guild).map(config -> {
 			Set<Long> out = new HashSet<>();
-			getWarningRoles(guild).forEach(r -> out.add(r.getIdLong()));
+			// Get all roles
+			guild.getRoles()
+					// Stream
+					.stream()
+					// Filter roles that start with prefix
+					.filter(r -> r.getName().startsWith(config.getWarningsPrefix()))
+					// Reverse order
+					.sorted(Comparator.reverseOrder())
+					// Limit amount of warning roles
+					.limit(config.getMaxWarnings())
+					// Get role ID
+					.map(Role::getIdLong)
+					// Add to list
+					.forEach(out::add);
+			// Add jail role
 			out.add(config.getJailRole());
 			return out;
-		}).orElse(new HashSet<>());
+		}).orElse(Set.of());
 	}
 
-	public List<Role> getWarningRoles(Guild guild) {
-		return get(guild)
-				// Map
-				.map(config -> guild.getRoles()
-						// Stream
-						.stream()
-						// Filter roles that start with prefix
-						.filter(r -> r.getName().startsWith(config.getWarningsPrefix()))
-						// Reverse order
-						.sorted(Comparator.reverseOrder())
-						// As set
-						.toList())
-				.orElseThrow();
-	}
-	
+//	private List<Role> getWarningRoles(Guild guild) {
+//		return get(guild)
+//				// Map
+//				.map(config -> guild.getRoles()
+//						// Stream
+//						.stream()
+//						// Filter roles that start with prefix
+//						.filter(r -> r.getName().startsWith(config.getWarningsPrefix()))
+//						// Reverse order
+//						.sorted(Comparator.reverseOrder())
+//						// As set
+//						.toList())
+//				.orElseThrow();
+//	}
+
 	public boolean isEnabled(Guild guild) {
 		return get(guild).map(CustomJailConfiguration::isEnabled).orElse(false);
 	}
@@ -67,12 +80,12 @@ public class CustomJailConfigurationService {
 		return database.findByGuild(guild);
 	}
 
-	@CacheEvict(cacheNames = { "customjail", "jailManagedRoles"}, key = "#guild.idLong")
+	@CacheEvict(cacheNames = { "customjail", "jailManagedRoles" }, key = "#guild.idLong")
 	public void delete(Guild guild) {
 		database.deleteByGuild(guild);
 	}
 
-	@CacheEvict(cacheNames = { "customjail", "jailManagedRoles"}, key = "#config.guild")
+	@CacheEvict(cacheNames = { "customjail", "jailManagedRoles" }, key = "#config.guild")
 	public CustomJailConfiguration save(CustomJailConfiguration config) {
 		return database.save(config);
 	}

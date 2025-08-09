@@ -130,7 +130,7 @@ public class JailSchedulerImpl implements JailScheduler {
 
 	@Override
 	public Date createWarningTimer(long guild, long member, CustomTime time) {
-		logger.debug("Starting warning timer for {} with {}", member, time);
+		logger.info("Starting warning timer for {} with {}", member, time);
 		JobKey key = warningJob(guild, member);
 
 		if (isWarningTimerRunning(guild, member))

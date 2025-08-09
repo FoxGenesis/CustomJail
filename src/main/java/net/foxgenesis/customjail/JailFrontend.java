@@ -217,9 +217,10 @@ public class JailFrontend extends ListenerAdapter {
 				CustomTime duration = event.getOption("duration", o -> new CustomTime(o.getAsString()));
 				String reason = event.getOption("reason", null, OptionMapping::getAsString);
 				boolean active = event.getOption("add-warning", true, OptionMapping::getAsBoolean);
+				boolean anon = event.getOption("anonymous", true, OptionMapping::getAsBoolean);
 
 				attemptAction(event, (hook, locale) -> {
-					jail.jail(member, event.getMember(), duration, reason, active);
+					jail.jail(member, event.getMember(), duration, reason, active, anon);
 					return Response.success(messages.getMessage("customjail.embed.jailed-user", new Object[] {
 							member.getAsMention(), duration.getLocalizedDisplayString(messages, locale) }, locale));
 				}).queue();
@@ -427,7 +428,7 @@ public class JailFrontend extends ListenerAdapter {
 			this.warningLevel = jail.getWarningLevel(member);
 			this.warnings = jail.getTotalWarnings(member);
 
-			ActionRow interactions = ActionRow.of(getAddWarningButton(true),
+			ActionRow interactions = ActionRow.of(getAddWarningButton(true), addAnonButton(true),
 					Button.danger("jailuser", messages.getMessage("customjail.embed.jail-user", locale)).asDisabled());
 
 			InteractionHook hook = event.getHook();
@@ -457,6 +458,8 @@ public class JailFrontend extends ListenerAdapter {
 			switch (event.getButton().getId()) {
 			case "with-warning" -> event.editButton(getAddWarningButton(false)).queue();
 			case "without-warning" -> event.editButton(getAddWarningButton(true)).queue();
+			case "anon" -> event.editButton(addAnonButton(false)).queue();
+			case "non-anon" -> event.editButton(addAnonButton(true)).queue();
 			case "jailuser" -> event.replyModal(createJailModal(member)).queue();
 			}
 		}
@@ -471,12 +474,13 @@ public class JailFrontend extends ListenerAdapter {
 
 				Message message = event.getMessage();
 				Button withWarning = message.getButtonById("with-warning"),
-						withoutWarning = message.getButtonById("without-warning"),
-						jailButton = message.getButtonById("jailuser");
+						withoutWarning = message.getButtonById("without-warning"), anon = message.getButtonById("anon"),
+						nonAnon = message.getButtonById("non-anon"), jailButton = message.getButtonById("jailuser");
 
 				event.editComponents(
 						ActionRow.of(event.getSelectMenu().createCopy().setDefaultValues(event.getValues()).build()),
-						ActionRow.of(withWarning != null ? withWarning : withoutWarning, jailButton.asEnabled()))
+						ActionRow.of(withWarning != null ? withWarning : withoutWarning, anon != null ? anon : nonAnon,
+								jailButton.asEnabled()))
 						.queue();
 			}
 			}
@@ -489,6 +493,7 @@ public class JailFrontend extends ListenerAdapter {
 				Message message = event.getMessage();
 
 				boolean withWarning = message.getButtonById("with-warning") != null;
+				boolean anon = message.getButtonById("anon") != null;
 				String reason = event.getValue("reason").getAsString();
 
 				expirationFuture.cancel(true);
@@ -499,7 +504,7 @@ public class JailFrontend extends ListenerAdapter {
 
 					MessageEmbed embed = null;
 					try {
-						jail.jail(member, event.getMember(), time, reason, withWarning);
+						jail.jail(member, event.getMember(), time, reason, withWarning, anon);
 
 						embed = Response.success(messages.getMessage("customjail.embed.jailed-user", new Object[] {
 								member.getAsMention(), time.getLocalizedDisplayString(messages, locale) }, locale));
@@ -525,6 +530,14 @@ public class JailFrontend extends ListenerAdapter {
 			builder.addLocalizedField("customjail.embed.warning-level", "" + warningLevel, true);
 			builder.addLocalizedField("customjail.embed.total-warnings", "" + warnings, true);
 			return builder.build();
+		}
+
+		private Button addAnonButton(boolean anon) {
+			return anon
+					? Button.primary("anon", messages.getMessage("customjail.embed.anon", locale))
+							.withEmoji(Emoji.fromFormatted("U+1F92B"))
+					: Button.secondary("non-anon", messages.getMessage("customjail.embed.non-anon", locale))
+							.withEmoji(Emoji.fromFormatted("U+1F4E3"));
 		}
 
 		private Button getAddWarningButton(boolean addWarning) {

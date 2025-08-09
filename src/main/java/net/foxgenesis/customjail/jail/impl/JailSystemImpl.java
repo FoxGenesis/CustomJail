@@ -138,7 +138,7 @@ public class JailSystemImpl extends ListenerAdapter
 	}
 
 	@Override
-	public void jail(Member member, Member moderator, CustomTime time, String reason, boolean addWarning)
+	public void jail(Member member, Member moderator, CustomTime time, String reason, boolean addWarning, boolean anon)
 			throws AlreadyJailedException {
 		if (member == null)
 			throw new CannotInteractException("customjail.no-target");
@@ -188,7 +188,7 @@ public class JailSystemImpl extends ListenerAdapter
 						// Create the jail embed
 						Locale locale = discordLogger.getEffectiveLocale(guild);
 						MessageEmbed embed = createJailEmbed(member, moderator, warning.map(Warning::getId), time,
-								reason, locale);
+								reason, anon, locale);
 						Button button = Button.primary(Utilities.Interactions.wrapInteraction("startjail", member),
 								messages.getMessage("customjail.embed.accept", null, locale));
 
@@ -298,7 +298,7 @@ public class JailSystemImpl extends ListenerAdapter
 	}
 
 	private MessageEmbed createJailEmbed(Member member, Member moderator, Optional<Long> caseId, CustomTime time,
-			String reason, Locale locale) {
+			String reason, boolean anon, Locale locale) {
 		// Create the jail embed
 		LocalizedEmbedBuilder jailEmbedBuilder = new LocalizedEmbedBuilder(messages, locale);
 		jailEmbedBuilder.setColor(Colors.ERROR);
@@ -307,7 +307,10 @@ public class JailSystemImpl extends ListenerAdapter
 
 		// Row 1
 		jailEmbedBuilder.addLocalizedField("customjail.embed.member", member.getAsMention(), true);
-		jailEmbedBuilder.addLocalizedField("customjail.embed.moderator", moderator.getAsMention(), true);
+		if(anon)
+			jailEmbedBuilder.addLocalizedFieldAndValue("customjail.embed.moderator", "customjail.anonymous", true, null);
+		else
+			jailEmbedBuilder.addLocalizedField("customjail.embed.moderator", moderator.getAsMention(), true);
 		jailEmbedBuilder.addLocalizedField("customjail.embed.caseid",
 				caseId.map(id -> "" + id).orElseGet(() -> messages.getMessage("customjail.embed.na", null, locale)),
 				true);
@@ -690,7 +693,7 @@ public class JailSystemImpl extends ListenerAdapter
 			throw new IllegalArgumentException("Title must not be empty!");
 
 		// Send DM message to member
-		if (!(user.isBot() && user.isSystem()))
+		if (user.isBot() || user.isSystem())
 			return;
 
 		user.openPrivateChannel()
