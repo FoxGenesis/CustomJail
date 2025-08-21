@@ -307,8 +307,9 @@ public class JailSystemImpl extends ListenerAdapter
 
 		// Row 1
 		jailEmbedBuilder.addLocalizedField("customjail.embed.member", member.getAsMention(), true);
-		if(anon)
-			jailEmbedBuilder.addLocalizedFieldAndValue("customjail.embed.moderator", "customjail.anonymous", true, null);
+		if (anon)
+			jailEmbedBuilder.addLocalizedFieldAndValue("customjail.embed.moderator", "customjail.anonymous", true,
+					null);
 		else
 			jailEmbedBuilder.addLocalizedField("customjail.embed.moderator", moderator.getAsMention(), true);
 		jailEmbedBuilder.addLocalizedField("customjail.embed.caseid",
@@ -618,7 +619,13 @@ public class JailSystemImpl extends ListenerAdapter
 
 	@EventListener
 	public void onWarningLevelDecreased(WarningLevelDecreasedEvent event) {
-		defaultEventHandle(event, true, null);
+		defaultEventHandle(event, false,
+				(locale, guild, user) -> notifyMember(locale, guild, user, "customjail.embed.warning-level-decreased",
+						Colors.NOTICE,
+						// Warning level
+						"customjail.embed.warning-level", event.getOriginalLevel() + " \u2192 " + event.getNewLevel(),
+						// Reason
+						"customjail.embed.reason", '*' + event.getReason(messages, locale) + '*'));
 	}
 
 	@EventListener
@@ -645,7 +652,9 @@ public class JailSystemImpl extends ListenerAdapter
 				(locale, guild, user) -> notifyMember(locale, guild, user, "customjail.notify.timer-started",
 						Colors.NOTICE,
 						// Reason
-						"customjail.embed.reason", '*' + event.getReason(messages, locale) + '*'));
+						"customjail.embed.reason", '*' + event.getReason(messages, locale) + '*',
+						// Time left
+						"customjail.embed.time-left", TimeFormat.RELATIVE.format(event.getEndDate().getTime())));
 	}
 
 	private <E extends ModeratorActionEvent> void defaultEventHandle(E event, boolean onlyIfModerator,
