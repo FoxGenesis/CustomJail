@@ -1,5 +1,6 @@
 package net.foxgenesis.customjail.jail;
 
+import java.util.NoSuchElementException;
 import java.util.Optional;
 
 import org.springframework.data.domain.Page;
@@ -58,15 +59,16 @@ public interface WarningSystem {
 
 	Page<Warning> getWarningPage(Member member, Pageable pageable);
 
-	void decreaseWarningLevel(Member member, Member moderator, String reason);
-	
-	void decreaseWarningLevel(long guild, long member, Member moderator, String reason);
+	void decreaseWarningLevel(Member member, Member moderator, @Nullable String reason);
 
-	default Warning updateWarningReason(long id, Member moderator, String newReason) {
-		return updateWarningReason(findWarning(id).orElseThrow(), moderator, newReason);
+	void decreaseWarningLevel(long guild, long member, Member moderator, @Nullable String reason);
+
+	default Warning updateWarningReason(long id, Member moderator, String newReason, @Nullable String reason)
+			throws NoSuchElementException {
+		return updateWarningReason(findWarning(id).orElseThrow(), moderator, newReason, reason);
 	}
-	
-	Warning updateWarningReason(Warning warning, Member moderator, String newReason);
+
+	Warning updateWarningReason(Warning warning, Member moderator, String newReason, @Nullable String reason);
 
 	void clearWarnings(Member member, Member moderator, String reason);
 

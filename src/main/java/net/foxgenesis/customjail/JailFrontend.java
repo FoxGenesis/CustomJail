@@ -2,6 +2,7 @@ package net.foxgenesis.customjail;
 
 import java.util.Arrays;
 import java.util.Locale;
+import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -308,6 +309,21 @@ public class JailFrontend extends ListenerAdapter {
 			jail.decreaseWarningLevel(member, member, reason);
 			success(event, "customjail.warning-decreased", member.getAsMention(), currentLevel, currentLevel - 1)
 					.queue();
+		}
+		// Update warning reason
+		case "update" -> {
+			long caseid = event.getOption("case-id", OptionMapping::getAsLong);
+			String newReason = event.getOption("new-reason", OptionMapping::getAsString);
+			String reason = event.getOption("reason", OptionMapping::getAsString);
+
+			try {
+				jail.updateWarningReason(caseid, event.getMember(), newReason, reason);
+			} catch (NoSuchElementException e) {
+				error(event, "customjail.no-warning", caseid).queue();
+				return;
+			}
+			
+			success(event, "customjail.embed.warning-updated").queue();
 		}
 		// Clear warnings
 		case "clear" -> {

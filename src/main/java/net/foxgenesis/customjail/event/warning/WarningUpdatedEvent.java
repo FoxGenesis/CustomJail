@@ -21,7 +21,7 @@ public class WarningUpdatedEvent extends WarningEvent {
 	private final Warning oldWarning;
 
 	public WarningUpdatedEvent(Member member, Member moderator, String reason, Warning oldWarning, Warning warning) {
-		super(member, moderator, reason, warning, Colors.NOTICE, "customjail.embed.warned-updated");
+		super(member, moderator, reason, warning, Colors.NOTICE, "customjail.embed.warning-updated");
 		this.oldWarning = Objects.requireNonNull(oldWarning);
 	}
 
@@ -42,6 +42,9 @@ public class WarningUpdatedEvent extends WarningEvent {
 		// Row 2
 		builder.addLocalizedField("customjail.embed.old-reason", Optional.ofNullable(oldWarning.getReason()).orElseGet(getDefaultReason(source, locale)), true);
 		builder.addLocalizedField("customjail.embed.new-reason", getWarningReason(source, locale), true);
+		
+		// Row 3
 		builder.addLocalizedField("customjail.embed.changed-by", getModerator(source, locale), false);
+		builder.addLocalizedField("customjail.embed.reason", getReason(source, locale), true);
 	}
 }

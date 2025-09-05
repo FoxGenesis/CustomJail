@@ -397,15 +397,15 @@ public class JailSystemImpl extends ListenerAdapter
 	}
 
 	@Override
-	public Warning updateWarningReason(Warning warning, Member moderator, String reason) {
+	public Warning updateWarningReason(Warning warning, Member moderator, String newReason, String reason) {
 		if (moderator != null)
 			if (moderator.getGuild().getIdLong() != warning.getGuild())
 				throw new CannotInteractException("customjail.warning-not-from-guild");
 
-		logger.info("Updating warning reason {} -> {}", warning, reason);
+		logger.info("Updating warning reason {} -> {}", warning, newReason);
 
 		Warning old = warning.copy();
-		warning.setReason(reason);
+		warning.setReason(newReason);
 		Warning newW = warningDatabase.save(warning);
 
 		Guild guild = jda.getGuildById(warning.getGuild());
