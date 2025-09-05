@@ -526,12 +526,6 @@ public class JailSystemImpl extends ListenerAdapter
 
 				switch (id) {
 				case "startjail" -> {
-					// Ensure button belongs to who pressed it
-					if (!pressed.equals(member)) {
-						error(event, "customjail.not-your-punishment").queue();
-						return;
-					}
-
 					// Check if enabled
 					if (!service.isEnabled(event.getGuild())) {
 						error(event, "customjail.not-enabled").queue();
@@ -544,15 +538,23 @@ public class JailSystemImpl extends ListenerAdapter
 						return;
 					}
 
+					// Ensure button belongs to who pressed it
+					if (!pressed.equals(member)) {
+						error(event, "customjail.not-your-punishment").queue();
+						return;
+					}
+
+					Locale locale = event.getUserLocale().toLocale();
+					Button successButton = Button
+							.success("jailAccepted", messages.getMessage("customjail.embed.accepted", null, locale))
+							.asDisabled();
+
 					if (scheduler.isJailTimerRunning(member)) {
 						error(event, "customjail.timerAlreadyStarted").queue();
 
 						// Set accepted if not already
 						if (event.getButton().getStyle() != ButtonStyle.SUCCESS)
-							event.editButton(
-									Button.success("jailAccepted", messages.getMessage("customjail.embed.accepted",
-											null, event.getUserLocale().toLocale())).asDisabled())
-									.queue();
+							event.editButton(successButton).queue();
 						return;
 					}
 
@@ -561,16 +563,10 @@ public class JailSystemImpl extends ListenerAdapter
 
 						Date date = startJailTimer(member, null, null);
 
-						Locale locale = event.getUserLocale().toLocale();
-						return hook
-								.editOriginalEmbeds(
-										Response.success(messages.getMessage("customjail.embed.time-remaining",
-												new Object[] { TimeFormat.RELATIVE.atInstant(date.toInstant()) },
-												event.getUserLocale().toLocale())))
-								.and(event.editButton(Button
-										.success("jailAccepted",
-												messages.getMessage("customjail.embed.accepted", null, locale))
-										.asDisabled()));
+						return hook.editOriginalEmbeds(
+								Response.success(messages.getMessage("customjail.embed.time-remaining",
+										new Object[] { TimeFormat.RELATIVE.atInstant(date.toInstant()) }, locale)))
+								.and(event.editButton(successButton));
 					}).queue();
 				}
 				}
