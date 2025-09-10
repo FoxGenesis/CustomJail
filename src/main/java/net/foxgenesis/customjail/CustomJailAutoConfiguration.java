@@ -10,6 +10,8 @@ import java.util.function.Function;
 
 import org.quartz.Scheduler;
 import org.quartz.simpl.CascadingClassLoadHelper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -54,9 +56,12 @@ import net.foxgenesis.watame.plugin.WatamePlugin;
 @SpringJDAAutoConfiguration
 @WatamePlugin(id = "customjail")
 public class CustomJailAutoConfiguration implements SchedulerFactoryBeanCustomizer {
-	
+
+	private final Logger logger = LoggerFactory.getLogger(getClass());
+
 	@Override
 	public void customize(SchedulerFactoryBean s) {
+		logger.debug("Customizing scheduler factory bean");
 		Properties properties = new Properties();
 		properties.setProperty("org.quartz.scheduler.classLoadHelper.class", CascadingClassLoadHelper.class.getName());
 		properties.setProperty("org.quartz.jobStore.useProperties", "" + true);
@@ -69,12 +74,14 @@ public class CustomJailAutoConfiguration implements SchedulerFactoryBeanCustomiz
 			Permission.MESSAGE_SEND })
 	JailSystem defaultJailSystem(
 			@Value("${customjail.timings:5s,30m,1h,5h,12h,1D,2D,3D,1W,2W,1M,2M,3M}") String[] timings) {
+		logger.debug("Using default JailSystem");
 		return new JailSystemImpl(timings);
 	}
 
 	@Bean
 	@ConditionalOnMissingBean
 	JailScheduler defaultJailScheduler(Scheduler scheduler) {
+		logger.debug("Using default JailScheduler");
 		return new JailSchedulerImpl(scheduler);
 	}
 
@@ -211,6 +218,7 @@ public class CustomJailAutoConfiguration implements SchedulerFactoryBeanCustomiz
 
 		@Bean
 		ManagedRoles customJailRoles(CustomJailConfigurationService service) {
+			logger.info("RoleStorage detected. Adding managed roles...");
 			return service::getManagedRoles;
 		}
 	}
