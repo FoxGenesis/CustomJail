@@ -3,6 +3,7 @@ package net.foxgenesis.customjail.web;
 import java.util.concurrent.CompletableFuture;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.ui.Model;
 import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -16,7 +17,9 @@ import net.dv8tion.jda.api.entities.Guild;
 import net.foxgenesis.customjail.database.CustomJailConfiguration;
 import net.foxgenesis.customjail.database.CustomJailConfigurationService;
 import net.foxgenesis.customjail.jail.JailSystem;
+import net.foxgenesis.watame.web.WebPanelUtil;
 import net.foxgenesis.watame.web.annotation.PluginMapping;
+import net.foxgenesis.watame.web.security.DiscordOAuth2User;
 
 @PluginMapping(plugin = "customjail")
 public class CustomJailController {
@@ -26,6 +29,9 @@ public class CustomJailController {
 
 	@Autowired
 	private JailSystem system;
+
+	@Autowired
+	private WebPanelUtil util;
 
 	@GetMapping
 	public String getView(Model model, @RequestAttribute Guild guild,
@@ -39,9 +45,9 @@ public class CustomJailController {
 	}
 
 	@PostMapping
-	public String update(Model model, @RequestAttribute Guild guild,
-			@Valid CustomJailConfiguration customJailConfiguration, BindingResult bindingResult,
-			HttpServletResponse res) {
+	public String update(Model model, @AuthenticationPrincipal DiscordOAuth2User oauth2User,
+			@RequestAttribute Guild guild, @Valid CustomJailConfiguration customJailConfiguration,
+			BindingResult bindingResult, HttpServletResponse res) {
 		if (bindingResult.hasErrors()) {
 			res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
 			return "customjail";
@@ -50,6 +56,9 @@ public class CustomJailController {
 		System.out.println(customJailConfiguration);
 		customJailConfiguration.setGuild(guild.getIdLong());
 		model.addAttribute("customJailConfiguration", database.save(customJailConfiguration));
+
+		util.logConfigurationChange(oauth2User, guild, "customjail");
+
 		return "customjail";
 	}
 
