@@ -168,7 +168,7 @@ public class JailSystemImpl extends ListenerAdapter
 		validateSettings(guild, (config, jailChannel, jailRole) -> {
 			// Add role to member
 			logger.debug("Attempting to jail {} in {}", member, guild);
-			logger.info("member {}\ttime {}\treason {}\taddWarning {}", member, time, reason, addWarning);
+			logger.debug("member {}\ttime {}\treason {}\taddWarning {}", member, time, reason, addWarning);
 			guild.addRoleToMember(member, jailRole)
 					// create warning if applicable, create jail timer and post embed in jail
 					// channel
