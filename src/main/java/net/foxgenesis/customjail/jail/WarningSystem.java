@@ -73,4 +73,6 @@ public interface WarningSystem {
 	void clearWarnings(Member member, Member moderator, String reason);
 
 	void clearWarnings(Guild guild);
+	
+	Optional<String> getWarningEndTimestamp(Member member);
 }

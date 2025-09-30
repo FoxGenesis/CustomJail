@@ -490,6 +490,11 @@ public class JailSystemImpl extends ListenerAdapter
 						messages.getMessage("customjail.reason.fix", null, discordLogger.getEffectiveLocale(guild)));
 		});
 	}
+	
+	@Override
+	public Optional<String> getWarningEndTimestamp(Member member) {
+		return scheduler.getWarningEndTimestamp(member);
+	}
 
 	// ===========================================================================================================
 

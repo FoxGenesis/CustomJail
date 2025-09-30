@@ -6,6 +6,8 @@ import java.util.Objects;
 import java.util.Optional;
 
 import org.springframework.context.MessageSource;
+import org.springframework.context.MessageSourceResolvable;
+import org.springframework.context.support.DefaultMessageSourceResolvable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -25,6 +27,15 @@ import net.foxgenesis.watame.util.discord.Response;
 import net.foxgenesis.watame.util.lang.LocalizedPageMenu;
 
 public class WarningPage extends LocalizedPageMenu<Warning> {
+	private static final MessageSourceResolvable TITLE = new DefaultMessageSourceResolvable(
+			"customjail.embed.warnings");
+	private static final MessageSourceResolvable WARNING_LEVEL = new DefaultMessageSourceResolvable(
+			"customjail.embed.warning-level");
+	private static final MessageSourceResolvable WARNING_EXPIRES = new DefaultMessageSourceResolvable(
+			"customjail.embed.warning-expires");
+	private static final MessageSourceResolvable WARNING_TIMER_NOT_ACTIVE = new DefaultMessageSourceResolvable(
+			"customjail.embed.na");
+
 	private final WarningSystem database;
 	private final Member target;
 
@@ -41,11 +52,21 @@ public class WarningPage extends LocalizedPageMenu<Warning> {
 		EmbedBuilder builder = new EmbedBuilder();
 		builder.setColor(Colors.INFO);
 		builder.setThumbnail(target.getEffectiveAvatarUrl());
-		builder.appendDescription("### " + messages.getMessage("customjail.embed.warnings", null, locale) + " - "
-				+ target.getAsMention() + "\n");
+		// Title
+		builder.appendDescription("### " + messages.getMessage(TITLE, locale) + " - " + target.getAsMention() + "\n");
+
+		// Warning level
+		builder.appendDescription(MarkdownUtil.bold(messages.getMessage(WARNING_LEVEL, locale) + ": ")
+				+ MarkdownUtil.monospace(database.getWarningLevel(target) + "") + "\n");
+
+		// Warning timer expires
 		builder.appendDescription(
-				MarkdownUtil.bold(messages.getMessage("customjail.embed.warning-level", null, locale) + ": ")
-						+ database.getWarningLevel(target) + "\n\n");
+				MarkdownUtil.bold(messages.getMessage(WARNING_EXPIRES, locale) + ": ")
+						+ database.getWarningEndTimestamp(target).orElseGet(
+								() -> MarkdownUtil.monospace(messages.getMessage(WARNING_TIMER_NOT_ACTIVE, locale)))
+						+ "\n\n");
+
+		// Write notes
 		builder.appendDescription(writeNotes(page, locale));
 
 		Object[] args = { page.getTotalElements(), page.getNumber() + 1, page.getTotalPages() };
@@ -53,17 +74,9 @@ public class WarningPage extends LocalizedPageMenu<Warning> {
 		return builder.build();
 	}
 
-	@Override
-	protected Page<Warning> getNewPage(Pageable pagable) {
-		return database.getWarningPage(target, pagable);
-	}
-
-	@Override
-	protected MessageEmbed createExpiredEmbed(Locale locale) {
-		return Response.error(messages.getMessage("watame.interaction.expired", null, locale));
-	}
-
 	private String writeNotes(Page<Warning> page, Locale locale) {
+		// FIXME: clean up and make readable
+
 		// "%1$s#%caseid%:%<s %date% - By **%moderator%**\n**Reason: **%reason%\n"
 		StringBuilder sb = new StringBuilder(">>> ");
 		Iterator<Warning> iterator = page.iterator();
@@ -90,5 +103,15 @@ public class WarningPage extends LocalizedPageMenu<Warning> {
 	protected MessageEmbed createEmptyPageEmbed(Locale locale) {
 		return Response
 				.error(messages.getMessage("customjail.warnings.empty", null, "customjail.warnings.empty", locale));
+	}
+
+	@Override
+	protected Page<Warning> getNewPage(Pageable pagable) {
+		return database.getWarningPage(target, pagable);
+	}
+
+	@Override
+	protected MessageEmbed createExpiredEmbed(Locale locale) {
+		return Response.error(messages.getMessage(INTERACTION_EXPIRED, locale));
 	}
 }
