@@ -77,31 +77,33 @@ public class JailFrontend extends ListenerAdapter {
 				Locale locale = event.getUserLocale().toLocale();
 				Member member = event.getTargetMember();
 
-				if (!jail.isJailed(member))
-					error(event, "customjail.notJailed").queue();
-				else if (isNonBotUser(event, member)) {
-					Optional<String> jailEndTimestamp = jail.getJailEndTimestamp(member);
-					boolean isTimerRunning = jailEndTimestamp.isPresent();
+				if (isValidUser(event, member))
+					if (!jail.isJailed(member))
+						error(event, "customjail.notJailed").queue();
+					else if (isNonBotUser(event, member)) {
+						Optional<String> jailEndTimestamp = jail.getJailEndTimestamp(member);
+						boolean isTimerRunning = jailEndTimestamp.isPresent();
 
-					// Create embed
-					JailDetails details = jail.getJailDetails(member);
+						// Create embed
+						JailDetails details = jail.getJailDetails(member);
 
-					LocalizedEmbedBuilder builder = new LocalizedEmbedBuilder(messages, locale);
-					details.applyToEmbedBuilder(builder, messages, locale, member, jail.getJailEndTimestamp(member));
+						LocalizedEmbedBuilder builder = new LocalizedEmbedBuilder(messages, locale);
+						details.applyToEmbedBuilder(builder, messages, locale, member,
+								jail.getJailEndTimestamp(member));
 
-					MessageEmbed embed = builder.build();
+						MessageEmbed embed = builder.build();
 
-					// Create actions
-					ActionRow interactions = ActionRow.of(
-							Button.danger(Utilities.Interactions.wrapInteraction("forcestart", member),
-									messages.getMessage("customjail.embed.forcestart", locale))
-									.withDisabled(isTimerRunning),
-							Button.danger(Utilities.Interactions.wrapInteraction("unjail", member),
-									messages.getMessage("customjail.embed.unjail", locale)));
+						// Create actions
+						ActionRow interactions = ActionRow.of(
+								Button.danger(Utilities.Interactions.wrapInteraction("forcestart", member),
+										messages.getMessage("customjail.embed.forcestart", locale))
+										.withDisabled(isTimerRunning),
+								Button.danger(Utilities.Interactions.wrapInteraction("unjail", member),
+										messages.getMessage("customjail.embed.unjail", locale)));
 
-					// Reply with embed and actions
-					event.replyEmbeds(embed).setComponents(interactions).setEphemeral(true).queue();
-				}
+						// Reply with embed and actions
+						event.replyEmbeds(embed).setComponents(interactions).setEphemeral(true).queue();
+					}
 			}
 			case "View Warnings" -> {
 				if (isValidUser(event, event.getTargetMember())) {
@@ -322,7 +324,7 @@ public class JailFrontend extends ListenerAdapter {
 				error(event, "customjail.no-warning", caseid).queue();
 				return;
 			}
-			
+
 			success(event, "customjail.embed.warning-updated").queue();
 		}
 		// Clear warnings
