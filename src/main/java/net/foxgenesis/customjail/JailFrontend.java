@@ -437,6 +437,7 @@ public class JailFrontend extends ListenerAdapter {
 		private final Member member;
 		private final int warningLevel;
 		private final int warnings;
+		private final String warningExpires;
 
 		private CustomTime time;
 
@@ -445,6 +446,8 @@ public class JailFrontend extends ListenerAdapter {
 			this.member = event.getTargetMember();
 			this.warningLevel = jail.getWarningLevel(member);
 			this.warnings = jail.getTotalWarnings(member);
+			this.warningExpires = jail.getWarningEndTimestamp(member)
+					.orElseGet(() -> messages.getMessage("customjail.embed.na", locale));
 
 			ActionRow interactions = ActionRow.of(getAddWarningButton(true), addAnonButton(true),
 					Button.danger("jailuser", messages.getMessage("customjail.embed.jail-user", locale)).asDisabled());
@@ -547,6 +550,7 @@ public class JailFrontend extends ListenerAdapter {
 			builder.addLocalizedField("customjail.embed.member", member.getAsMention(), true);
 			builder.addLocalizedField("customjail.embed.warning-level", "" + warningLevel, true);
 			builder.addLocalizedField("customjail.embed.total-warnings", "" + warnings, true);
+			builder.addLocalizedField("customjail.embed.warning-expires", warningExpires, false);
 			return builder.build();
 		}
 
