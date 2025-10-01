@@ -1,0 +1,58 @@
+package net.foxgenesis.customjail.util;
+
+import java.util.Objects;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
+
+import org.jetbrains.annotations.Nullable;
+
+public class CachedObject<T> {
+	private final AtomicReference<T> obj = new AtomicReference<>();
+	private final AtomicLong lastCache = new AtomicLong();
+	private final Supplier<T> updateFunction;
+
+	private final long cacheTime;
+
+	public CachedObject(Supplier<T> updateFunction, long cacheTime) {
+		this.updateFunction = Objects.requireNonNull(updateFunction);
+		this.cacheTime = Math.max(1, cacheTime);
+	}
+
+	public CachedObject(Supplier<T> updateFunction, long cacheTime, TimeUnit unit) {
+		this(updateFunction, TimeUnit.MILLISECONDS.convert(cacheTime, unit));
+	}
+
+	@Nullable
+	public T get() {
+		long time = System.currentTimeMillis();
+		if (time - lastCache.get() > cacheTime) {
+			synchronized (this) {
+				if (time - lastCache.get() > cacheTime)
+					return getNew();
+			}
+		}
+		return obj.get();
+	}
+
+	@Nullable
+	public synchronized T getNew() {
+		return set(updateFunction.get());
+	}
+
+	@Nullable
+	public synchronized T set(T newValue) {
+		lastCache.set(System.currentTimeMillis());
+		obj.set(newValue);
+		return newValue;
+	}
+
+	public void invalidate() {
+		lastCache.set(0);
+	}
+
+	public long getCacheTime() {
+		return cacheTime;
+	}
+}
