@@ -21,7 +21,7 @@ import net.foxgenesis.customjail.database.warning.Warning;
 import net.foxgenesis.customjail.jail.WarningSystem;
 import net.foxgenesis.watame.util.discord.Colors;
 import net.foxgenesis.watame.util.discord.DiscordUtils;
-import net.foxgenesis.watame.util.discord.Response;
+import net.foxgenesis.watame.util.discord.components.Response;
 import net.foxgenesis.watame.util.lang.LocalizedPageMenu;
 
 public class WarningPage extends LocalizedPageMenu<Warning> {

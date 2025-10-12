@@ -6,7 +6,7 @@ import org.springframework.context.MessageSource;
 
 import net.dv8tion.jda.api.entities.Member;
 import net.foxgenesis.watame.util.discord.Colors;
-import net.foxgenesis.watame.util.discord.ModeratorActionEvent;
+import net.foxgenesis.watame.util.discord.components.ModeratorActionEvent;
 import net.foxgenesis.watame.util.lang.LocalizedEmbedBuilder;
 
 public class WarningsClearedEvent extends ModeratorActionEvent {

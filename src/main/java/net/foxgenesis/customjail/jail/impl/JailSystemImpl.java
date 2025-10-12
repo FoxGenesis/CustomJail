@@ -33,6 +33,12 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.lang.Nullable;
 
 import net.dv8tion.jda.api.Permission;
+import net.dv8tion.jda.api.components.actionrow.ActionRow;
+import net.dv8tion.jda.api.components.buttons.Button;
+import net.dv8tion.jda.api.components.buttons.ButtonStyle;
+import net.dv8tion.jda.api.components.container.Container;
+import net.dv8tion.jda.api.components.replacer.ComponentReplacer;
+import net.dv8tion.jda.api.components.textdisplay.TextDisplay;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.GuildVoiceState;
 import net.dv8tion.jda.api.entities.Member;
@@ -49,13 +55,13 @@ import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
 import net.dv8tion.jda.api.exceptions.ErrorHandler;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.interactions.callbacks.IReplyCallback;
-import net.dv8tion.jda.api.interactions.components.buttons.Button;
-import net.dv8tion.jda.api.interactions.components.buttons.ButtonStyle;
 import net.dv8tion.jda.api.requests.ErrorResponse;
 import net.dv8tion.jda.api.requests.RestAction;
 import net.dv8tion.jda.api.requests.restaction.interactions.ReplyCallbackAction;
 import net.dv8tion.jda.api.utils.MarkdownUtil;
 import net.dv8tion.jda.api.utils.TimeFormat;
+import net.dv8tion.jda.api.utils.Timestamp;
+import net.foxgenesis.customjail.CommonMessages;
 import net.foxgenesis.customjail.database.CustomJailConfiguration;
 import net.foxgenesis.customjail.database.CustomJailConfigurationService;
 import net.foxgenesis.customjail.database.warning.Warning;
@@ -80,12 +86,16 @@ import net.foxgenesis.customjail.jail.exception.NotSetupException;
 import net.foxgenesis.customjail.util.CustomTime;
 import net.foxgenesis.customjail.util.Utilities;
 import net.foxgenesis.springJDA.SpringJDA;
+import net.foxgenesis.watame.util.StringUtils;
 import net.foxgenesis.watame.util.discord.Colors;
 import net.foxgenesis.watame.util.discord.DiscordLogger;
 import net.foxgenesis.watame.util.discord.DiscordUtils;
-import net.foxgenesis.watame.util.discord.ModeratorActionEvent;
-import net.foxgenesis.watame.util.discord.Response;
+import net.foxgenesis.watame.util.discord.components.ComponentUtils;
+import net.foxgenesis.watame.util.discord.components.ModeratorActionEvent;
+import net.foxgenesis.watame.util.discord.components.Response;
+import net.foxgenesis.watame.util.lang.LocalizedContainerBuilder;
 import net.foxgenesis.watame.util.lang.LocalizedEmbedBuilder;
+import net.foxgenesis.watame.util.lang.LocalizedSectionBuilder;
 
 /**
  * Standard implementation of a {@link JailSystem}.
@@ -187,17 +197,13 @@ public class JailSystemImpl extends ListenerAdapter
 
 						// Create the jail embed
 						Locale locale = discordLogger.getEffectiveLocale(guild);
-						MessageEmbed embed = createJailEmbed(member, moderator, warning.map(Warning::getId), time,
+						Container container = createJailContainer(member, moderator, warning.map(Warning::getId), time,
 								reason, anon, locale);
-						Button button = Button.primary(Utilities.Interactions.wrapInteraction("startjail", member),
-								messages.getMessage("customjail.embed.accept", null, locale));
 
 						// Send jail message
-						return jailChannel.sendMessage(member.getAsMention())
-								// Set embeds
-								.setEmbeds(embed)
-								// Add accept button
-								.addActionRow(button)
+						return jailChannel.sendMessageComponents(container)
+								// Use V2
+								.useComponentsV2()
 								// Publish event on success
 								.onSuccess(m -> {
 									logger.info("{} jailed {} in {} for {} \"{}\"", moderator, member, guild,
@@ -297,38 +303,48 @@ public class JailSystemImpl extends ListenerAdapter
 		return scheduler.getJailEndTimestamp(member);
 	}
 
-	private MessageEmbed createJailEmbed(Member member, Member moderator, Optional<Long> caseId, CustomTime time,
+	private Container createJailContainer(Member member, Member moderator, Optional<Long> caseId, CustomTime time,
 			String reason, boolean anon, Locale locale) {
-		// Create the jail embed
-		LocalizedEmbedBuilder jailEmbedBuilder = new LocalizedEmbedBuilder(messages, locale);
-		jailEmbedBuilder.setColor(Colors.ERROR);
-		jailEmbedBuilder.setLocalizedTitle("customjail.embed.jailed");
-		jailEmbedBuilder.setThumbnail(member.getEffectiveAvatarUrl());
+		LocalizedContainerBuilder cb = new LocalizedContainerBuilder(messages, locale);
+		LocalizedSectionBuilder sb = cb.getNewLocalizedSectionBuilder();
+		cb.setUniqueId(100);
+		cb.setColor(Colors.ERROR);
 
-		// Row 1
-		jailEmbedBuilder.addLocalizedField("customjail.embed.member", member.getAsMention(), true);
-		if(anon)
-			jailEmbedBuilder.addLocalizedFieldAndValue("customjail.embed.moderator", "customjail.anonymous", true, null);
-		else
-			jailEmbedBuilder.addLocalizedField("customjail.embed.moderator", moderator.getAsMention(), true);
-		jailEmbedBuilder.addLocalizedField("customjail.embed.caseid",
-				caseId.map(id -> "" + id).orElseGet(() -> messages.getMessage("customjail.embed.na", null, locale)),
-				true);
+		Button acceptButton = sb.newLocalizedButton(ButtonStyle.PRIMARY,
+				Utilities.Interactions.wrapInteraction("startjail", member), CommonMessages.ACCEPT);
 
-		// Row 2
-		jailEmbedBuilder.addLocalizedField("customjail.embed.duration",
-				time.getLocalizedDisplayString(messages, locale), true);
+		sb.setThumbnailUrl(member.getEffectiveAvatarUrl());
+		sb.addLocalizedFormattedTextDisplay("## %s\n%s", CommonMessages.MEMBER_JAILED,
+				"Welcome to City 17 " + member.getAsMention() + ".\nPlease hit \"Accept\" to start the timer.");
+		cb.addSectionAndClear(sb);
 
-		// Row 3
-		jailEmbedBuilder.addLocalizedField("customjail.embed.reason",
-				Optional.ofNullable(reason).filter(r -> !r.isBlank())
-						.orElseGet(() -> messages.getMessage("customjail.embed.defaultReason", null, locale)),
-				false);
+		cb.addSmallDividingSeparator();
 
-		jailEmbedBuilder.setTimestamp(Instant.now());
-		jailEmbedBuilder.setLocalizedFooter("customjail.footer");
+		String detailsFormat = """
+				**%s:** %s
+				**%s:** %s
+				**%s:** %s
+				**%s:** %s
+				""";
+		cb.addLocalizedFormattedTextDisplay(detailsFormat,
+				// Member
+				CommonMessages.MEMBER, member.getAsMention(),
+				// Moderator
+				CommonMessages.MODERATOR, anon ? CommonMessages.ANONYMOUS : moderator.getAsMention(),
+				// Case-ID
+				CommonMessages.CASE_ID, caseId.isPresent() ? caseId.get() : CommonMessages.NA,
+				// Duration
+				CommonMessages.DURATION, time.getLocalizedDisplayString(messages, locale));
+		cb.addSmallDividingSeparator();
 
-		return jailEmbedBuilder.build();
+		cb.addLocalizedFormattedTextDisplay("**%s**\n%s", CommonMessages.REASON,
+				StringUtils.nullIfBlank(reason) == null ? CommonMessages.DEFAULT_REASON : reason);
+
+		cb.addSmallDividingSeparator();
+
+		cb.addActionRow(ActionRow.of(acceptButton));
+
+		return cb.build();
 	}
 
 	// ===========================================================================================================
@@ -543,33 +559,60 @@ public class JailSystemImpl extends ListenerAdapter
 						return;
 					}
 
+					// Create replacer for jail container
+					Function<Object, ComponentReplacer> containerReplacer = endTimestamp -> ComponentReplacer.of(
+							// Of container
+							Container.class,
+							// Container with ID 100
+							container -> container.getUniqueId() == 100,
+							// Update container
+							container -> {
+								Locale locale = event.getUserLocale().toLocale();
+
+								// Add time left to new component
+								Container newContainer = ComponentUtils.addComponentsToContainer(container,
+										TextDisplay.ofFormat("-# %s: %s",
+												messages.getMessage(CommonMessages.TIME_LEFT, locale), endTimestamp));
+
+								// Replace accept button with accepted
+								return newContainer.replace(ComponentReplacer.of(Button.class,
+										button -> button.getCustomId().startsWith("startjail"),
+										button -> Button
+												.success("jailAccepted",
+														messages.getMessage("customjail.embed.accepted", null, locale))
+												.asDisabled()));
+							});
+
+					// If timer is already running, update jail container
 					if (scheduler.isJailTimerRunning(member)) {
-						error(event, "customjail.timerAlreadyStarted").queue();
+						error(event, "customjail.timer-already-started").queue();
 
 						// Set accepted if not already
 						if (event.getButton().getStyle() != ButtonStyle.SUCCESS)
-							event.editButton(
-									Button.success("jailAccepted", messages.getMessage("customjail.embed.accepted",
-											null, event.getUserLocale().toLocale())).asDisabled())
-									.queue();
+							event.getMessage()
+									.editMessageComponents(event.getMessage().getComponentTree()
+											.replace(containerReplacer.apply(getJailEndTimestamp(member).get())))
+									.useComponentsV2().queue();
 						return;
 					}
 
 					// Display working
 					event.deferReply(true).flatMap(hook -> {
-
+						// Attempt to start timer
 						Date date = startJailTimer(member, null, null);
 
 						Locale locale = event.getUserLocale().toLocale();
-						return hook
-								.editOriginalEmbeds(
-										Response.success(messages.getMessage("customjail.embed.time-remaining",
-												new Object[] { TimeFormat.RELATIVE.atInstant(date.toInstant()) },
-												event.getUserLocale().toLocale())))
-								.and(event.editButton(Button
-										.success("jailAccepted",
-												messages.getMessage("customjail.embed.accepted", null, locale))
-										.asDisabled()));
+						Timestamp endTimestamp = TimeFormat.RELATIVE.atInstant(date.toInstant());
+
+						// Create response embed
+						MessageEmbed successEmbed = Response.success(messages
+								.getMessage("customjail.embed.time-remaining", new Object[] { endTimestamp }, locale));
+
+						// Update jail container
+						RestAction<?> updateContainer = event.getMessage().editMessageComponents(
+								event.getMessage().getComponentTree().replace(containerReplacer.apply(endTimestamp)))
+								.useComponentsV2();
+						return hook.editOriginalEmbeds(successEmbed).and(updateContainer);
 					}).queue();
 				}
 				}

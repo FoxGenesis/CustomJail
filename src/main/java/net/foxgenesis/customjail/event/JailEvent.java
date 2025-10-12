@@ -1,7 +1,7 @@
 package net.foxgenesis.customjail.event;
 
 import net.dv8tion.jda.api.entities.Member;
-import net.foxgenesis.watame.util.discord.ModeratorActionEvent;
+import net.foxgenesis.watame.util.discord.components.ModeratorActionEvent;
 
 public abstract class JailEvent extends ModeratorActionEvent  {
 

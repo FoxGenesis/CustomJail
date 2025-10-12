@@ -5,7 +5,7 @@ import java.util.function.Supplier;
 
 import org.springframework.context.MessageSource;
 
-import net.foxgenesis.watame.util.discord.LoggableEvent;
+import net.foxgenesis.watame.util.discord.components.LoggableEvent;
 
 public abstract class CustomJailEvent extends LoggableEvent {
 

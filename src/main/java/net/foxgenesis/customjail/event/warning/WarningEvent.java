@@ -8,7 +8,7 @@ import org.springframework.context.MessageSource;
 
 import net.dv8tion.jda.api.entities.Member;
 import net.foxgenesis.customjail.database.warning.Warning;
-import net.foxgenesis.watame.util.discord.ModeratorActionEvent;
+import net.foxgenesis.watame.util.discord.components.ModeratorActionEvent;
 
 public abstract class WarningEvent extends ModeratorActionEvent {
 
