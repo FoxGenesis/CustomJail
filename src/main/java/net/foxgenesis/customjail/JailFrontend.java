@@ -72,20 +72,21 @@ public class JailFrontend extends ListenerAdapter {
 				Locale locale = event.getUserLocale().toLocale();
 				Member member = event.getTargetMember();
 
-				if (!jail.isJailed(member))
-					error(event, "customjail.notJailed").queue();
-				else if (isNonBotUser(event, member)) {
-					// Create embed
-					JailDetails details = jail.getJailDetails(member);
+				if (isValidUser(event, member))
+					if (!jail.isJailed(member))
+						error(event, "customjail.notJailed").queue();
+					else if (isNonBotUser(event, member)) {
+						// Create embed
+						JailDetails details = jail.getJailDetails(member);
 
-					LocalizedContainerBuilder cb = new LocalizedContainerBuilder(messages, locale);
-					details.applyToContainerBuilder(cb, member, jail.getJailEndTimestamp(member));
+						LocalizedContainerBuilder cb = new LocalizedContainerBuilder(messages, locale);
+						details.applyToContainerBuilder(cb, member, jail.getJailEndTimestamp(member));
 
-					// Reply with embed and actions
-					event.replyComponents(cb.build())
-							// This is required any time you are using Components V2
-							.useComponentsV2().setEphemeral(true).queue();
-				}
+						// Reply with embed and actions
+						event.replyComponents(cb.build())
+								// This is required any time you are using Components V2
+								.useComponentsV2().setEphemeral(true).queue();
+					}
 			}
 			case "View Warnings" -> {
 				if (isValidUser(event, event.getTargetMember())) {
