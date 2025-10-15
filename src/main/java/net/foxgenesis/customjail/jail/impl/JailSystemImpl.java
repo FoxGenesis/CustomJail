@@ -178,7 +178,7 @@ public class JailSystemImpl extends ListenerAdapter
 		validateSettings(guild, (config, jailChannel, jailRole) -> {
 			// Add role to member
 			logger.debug("Attempting to jail {} in {}", member, guild);
-			logger.info("member {}\ttime {}\treason {}\taddWarning {}", member, time, reason, addWarning);
+			logger.debug("member {}\ttime {}\treason {}\taddWarning {}", member, time, reason, addWarning);
 			guild.addRoleToMember(member, jailRole)
 					// create warning if applicable, create jail timer and post embed in jail
 					// channel
@@ -412,15 +412,15 @@ public class JailSystemImpl extends ListenerAdapter
 	}
 
 	@Override
-	public Warning updateWarningReason(Warning warning, Member moderator, String reason) {
+	public Warning updateWarningReason(Warning warning, Member moderator, String newReason, String reason) {
 		if (moderator != null)
 			if (moderator.getGuild().getIdLong() != warning.getGuild())
 				throw new CannotInteractException("customjail.warning-not-from-guild");
 
-		logger.info("Updating warning reason {} -> {}", warning, reason);
+		logger.info("Updating warning reason {} -> {}", warning, newReason);
 
 		Warning old = warning.copy();
-		warning.setReason(reason);
+		warning.setReason(newReason);
 		Warning newW = warningDatabase.save(warning);
 
 		Guild guild = jda.getGuildById(warning.getGuild());
@@ -505,6 +505,11 @@ public class JailSystemImpl extends ListenerAdapter
 						messages.getMessage("customjail.reason.fix", null, discordLogger.getEffectiveLocale(guild)));
 		});
 	}
+	
+	@Override
+	public Optional<String> getWarningEndTimestamp(Member member) {
+		return scheduler.getWarningEndTimestamp(member);
+	}
 
 	// ===========================================================================================================
 
@@ -541,12 +546,6 @@ public class JailSystemImpl extends ListenerAdapter
 
 				switch (id) {
 				case "startjail" -> {
-					// Ensure button belongs to who pressed it
-					if (!pressed.equals(member)) {
-						error(event, "customjail.not-your-punishment").queue();
-						return;
-					}
-
 					// Check if enabled
 					if (!service.isEnabled(event.getGuild())) {
 						error(event, "customjail.not-enabled").queue();
@@ -661,7 +660,13 @@ public class JailSystemImpl extends ListenerAdapter
 
 	@EventListener
 	public void onWarningLevelDecreased(WarningLevelDecreasedEvent event) {
-		defaultEventHandle(event, true, null);
+		defaultEventHandle(event, false,
+				(locale, guild, user) -> notifyMember(locale, guild, user, "customjail.embed.warning-level-decreased",
+						Colors.NOTICE,
+						// Warning level
+						"customjail.embed.warning-level", event.getOriginalLevel() + " \u2192 " + event.getNewLevel(),
+						// Reason
+						"customjail.embed.reason", '*' + event.getReason(messages, locale) + '*'));
 	}
 
 	@EventListener
@@ -688,7 +693,9 @@ public class JailSystemImpl extends ListenerAdapter
 				(locale, guild, user) -> notifyMember(locale, guild, user, "customjail.notify.timer-started",
 						Colors.NOTICE,
 						// Reason
-						"customjail.embed.reason", '*' + event.getReason(messages, locale) + '*'));
+						"customjail.embed.reason", '*' + event.getReason(messages, locale) + '*',
+						// Time left
+						"customjail.embed.time-left", TimeFormat.RELATIVE.format(event.getEndDate().getTime())));
 	}
 
 	private <E extends ModeratorActionEvent> void defaultEventHandle(E event, boolean onlyIfModerator,
