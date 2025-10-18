@@ -312,7 +312,7 @@ public class JailSystemImpl extends ListenerAdapter
 		cb.setColor(Colors.ERROR);
 
 		Button acceptButton = sb.newLocalizedButton(ButtonStyle.PRIMARY,
-				Utilities.Interactions.WrappedInteractions.START_JAIL.wrapInteraction(member), CommonMessages.ACCEPT);
+				Utilities.Interactions.wrapInteraction("startjail", member), CommonMessages.ACCEPT);
 
 		sb.setThumbnailUrl(member.getEffectiveAvatarUrl());
 		sb.addLocalizedFormattedTextDisplay("## %s\n%s", CommonMessages.MEMBER_JAILED,
@@ -550,7 +550,6 @@ public class JailSystemImpl extends ListenerAdapter
 		service.delete(guild);
 	}
 
-	@SuppressWarnings("incomplete-switch")
 	@Override
 	public void onButtonInteraction(ButtonInteractionEvent event) {
 		if (!event.isFromGuild())
@@ -560,8 +559,8 @@ public class JailSystemImpl extends ListenerAdapter
 			unwrappedMember.ifPresentOrElse(member -> {
 				Member pressed = event.getMember();
 
-				switch (Utilities.Interactions.WrappedInteractions.parse(id)) {
-				case START_JAIL -> {
+				switch (id) {
+				case "startjail" -> {
 					// Check if enabled
 					if (!service.isEnabled(event.getGuild())) {
 						error(event, "customjail.not-enabled").queue();

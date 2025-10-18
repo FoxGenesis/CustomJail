@@ -97,10 +97,10 @@ public record JailDetails(long guild, long member, Long moderator, CustomTime du
 		boolean isTimerRunning = jailEndTimestamp.isPresent();
 
 		Button unjail = sb.newLocalizedButton(ButtonStyle.DANGER,
-				Utilities.Interactions.WrappedInteractions.UNJAIL.wrapInteraction(member), CommonMessages.UNJAIL);
+				Utilities.Interactions.wrapInteraction("unjail", member), CommonMessages.UNJAIL);
 		Button forcestart = sb.newLocalizedButton(ButtonStyle.DANGER,
-				Utilities.Interactions.WrappedInteractions.FORCE_START.wrapInteraction(member),
-				CommonMessages.FORCESTART).withDisabled(isTimerRunning);
+				Utilities.Interactions.wrapInteraction("forcestart", member), CommonMessages.FORCESTART)
+				.withDisabled(isTimerRunning);
 
 		// Section 1
 		sb.setThumbnailUrl(member.getEffectiveAvatarUrl());
