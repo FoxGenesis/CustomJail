@@ -16,6 +16,7 @@ public enum CommonMessages implements MessageSourceResolvable {
 	DEFAULT_REASON("customjail.embed.defaultReason"),
 	WARNING_LEVEL("customjail.embed.warning-level"),
 	TOTAL_WARNINGS("customjail.embed.total-warnings"),
+	WARNING_EXPIRES("customjail.embed.warning-expires"),
 	WITH_WARNING("customjail.embed.with-warning"),
 	NA("customjail.embed.na"),
 	CASE_ID("customjail.embed.caseid"),

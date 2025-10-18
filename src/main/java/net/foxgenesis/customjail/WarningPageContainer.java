@@ -2,6 +2,7 @@ package net.foxgenesis.customjail;
 
 import java.util.Iterator;
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 
 import org.springframework.context.MessageSource;
 import org.springframework.context.MessageSourceResolvable;
@@ -17,6 +18,7 @@ import net.dv8tion.jda.api.events.interaction.command.GenericCommandInteractionE
 import net.dv8tion.jda.api.utils.TimeFormat;
 import net.foxgenesis.customjail.database.warning.Warning;
 import net.foxgenesis.customjail.jail.WarningSystem;
+import net.foxgenesis.customjail.util.CachedObject;
 import net.foxgenesis.watame.util.StringUtils;
 import net.foxgenesis.watame.util.discord.Colors;
 import net.foxgenesis.watame.util.discord.DiscordUtils;
@@ -32,11 +34,22 @@ public class WarningPageContainer extends LocalizedContainerPageMenu<Warning> {
 	private final WarningSystem database;
 	private final Member target;
 
+	private final CachedObject<Integer> warningLevelCache;
+	private final CachedObject<Integer> totalWarningsCache;
+	private final CachedObject<Object> expiresCache;
+
 	public WarningPageContainer(GenericCommandInteractionEvent event, WarningSystem database, Member target,
 			MessageSource source) {
 		super(event, database.getWarningPage(target, PageRequest.of(0, 3, Sort.by("time").descending())), source);
 		this.database = Objects.requireNonNull(database);
 		this.target = Objects.requireNonNull(target);
+
+		warningLevelCache = new CachedObject<>(() -> database.getWarningLevel(target), 15, TimeUnit.SECONDS);
+		totalWarningsCache = new CachedObject<>(() -> database.getTotalWarnings(target), 15, TimeUnit.SECONDS);
+		expiresCache = new CachedObject<>(
+				() -> database.getWarningEndTimestamp(target).map(Object.class::cast).orElse(CommonMessages.NA), 15,
+				TimeUnit.SECONDS);
+
 		this.sendInitalMessage(event);
 	}
 
@@ -49,14 +62,17 @@ public class WarningPageContainer extends LocalizedContainerPageMenu<Warning> {
 		String headerFormat = """
 				%s: `%s`
 				%s: `%s`
+				%s: %s
 				""";
 		sb.setThumbnailUrl(target.getEffectiveAvatarUrl());
 		sb.addLocalizedFormattedTextDisplay("### %s - %s", TITLE, target.getAsMention());
 		sb.addLocalizedFormattedTextDisplay(headerFormat,
 				// Warning Level
-				CommonMessages.WARNING_LEVEL, database.getWarningLevel(target),
+				CommonMessages.WARNING_LEVEL, warningLevelCache.get(),
 				// Total Warnings
-				CommonMessages.TOTAL_WARNINGS, database.getTotalWarnings(target));
+				CommonMessages.TOTAL_WARNINGS, totalWarningsCache.get(),
+				// Warning Expires
+				CommonMessages.WARNING_EXPIRES, expiresCache.get());
 		builder.addSectionAndClear(sb);
 
 		builder.addDividingSeparator(Spacing.SMALL);

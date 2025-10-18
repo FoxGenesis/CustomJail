@@ -42,6 +42,7 @@ import net.foxgenesis.customjail.util.Utilities;
 import net.foxgenesis.watame.util.discord.DiscordUtils;
 import net.foxgenesis.watame.util.discord.components.Response;
 import net.foxgenesis.watame.util.lang.DiscordLocaleMessageSource;
+import net.foxgenesis.watame.util.lang.Localized;
 import net.foxgenesis.watame.util.lang.LocalizedContainerBuilder;
 import net.foxgenesis.watame.util.lang.LocalizedModalBuilder;
 
@@ -282,7 +283,7 @@ public class JailFrontend extends ListenerAdapter {
 		case "list" -> {
 			Member member = event.getOption("user", OptionMapping::getAsMember);
 			if (isNonBotUser(event, member))
-				new WarningPage(event, jail, member, messages);
+				new WarningPageContainer(event, jail, member, messages);
 		}
 		// Add warning
 		case "add" -> {
@@ -461,11 +462,15 @@ public class JailFrontend extends ListenerAdapter {
 		SelectMenu timeMenu = getTimeMenu(locale);
 
 		builder.addComponents(details);
-		builder.addLocalizedLabel(CommonMessages.DURATION, timeMenu);
-		builder.addLocalizedLabel(CommonMessages.WITH_WARNING, addWarning);
-		builder.addLocalizedLabel(CommonMessages.ANONYMOUS, anon);
+		builder.addLocalizedLabelWithDescription(CommonMessages.DURATION,
+				Localized.resolved("customjail.embed.duration-description"), timeMenu);
+		builder.addLocalizedLabelWithDescription(CommonMessages.WITH_WARNING,
+				Localized.resolved("customjail.embed.with-warning-description"), addWarning);
+		builder.addLocalizedLabelWithDescription(CommonMessages.ANONYMOUS,
+				Localized.resolved("customjail.embed.anonymous-description"), anon);
 
-		builder.addLocalizedLabel(CommonMessages.REASON, body);
+		builder.addLocalizedLabelWithDescription(CommonMessages.REASON,
+				Localized.resolved("customjail.embed.reason-description"), body);
 
 		event.replyModal(builder.build()).queue();
 	}
@@ -473,12 +478,14 @@ public class JailFrontend extends ListenerAdapter {
 	private TextDisplay getJailModalDetails(Member target, Locale locale) {
 		int warningLevel = jail.getWarningLevel(target);
 		int totalWarnings = jail.getTotalWarnings(target);
+		Object expires = jail.getWarningEndTimestamp(target).map(Object.class::cast).orElse(CommonMessages.NA);
 
 		StringBuilder builder = new StringBuilder();
 
 		appendBoldField(builder, locale, CommonMessages.MEMBER, target.getAsMention());
 		appendBoldField(builder, locale, CommonMessages.WARNING_LEVEL, MarkdownUtil.monospace(warningLevel + ""));
 		appendBoldField(builder, locale, CommonMessages.TOTAL_WARNINGS, MarkdownUtil.monospace(totalWarnings + ""));
+		appendBoldField(builder, locale, CommonMessages.WARNING_EXPIRES, expires);
 
 		return TextDisplay.of(builder.toString());
 	}
