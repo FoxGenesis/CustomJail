@@ -48,6 +48,7 @@ import net.dv8tion.jda.api.entities.User;
 import net.dv8tion.jda.api.entities.channel.concrete.PrivateChannel;
 import net.dv8tion.jda.api.entities.channel.middleman.GuildChannel;
 import net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel;
+import net.dv8tion.jda.api.events.guild.GuildBanEvent;
 import net.dv8tion.jda.api.events.guild.GuildLeaveEvent;
 import net.dv8tion.jda.api.events.guild.member.GuildMemberJoinEvent;
 import net.dv8tion.jda.api.events.guild.member.GuildMemberRemoveEvent;
@@ -505,7 +506,7 @@ public class JailSystemImpl extends ListenerAdapter
 						messages.getMessage("customjail.reason.fix", null, discordLogger.getEffectiveLocale(guild)));
 		});
 	}
-	
+
 	@Override
 	public Optional<String> getWarningEndTimestamp(Member member) {
 		return scheduler.getWarningEndTimestamp(member);
@@ -519,11 +520,25 @@ public class JailSystemImpl extends ListenerAdapter
 	}
 
 	@Override
+	public void onGuildBan(GuildBanEvent event) {
+		Guild guild = event.getGuild();
+		User user = event.getUser();
+
+		// Check if banned member is jailed
+		if (isJailed(guild.getIdLong(), user.getIdLong())) {
+			logger.info("Member {} banned {} while jail timer running. Removing timer...", user, guild);
+			scheduler.removeJailTimer(guild.getIdLong(), user.getIdLong());
+		}
+	}
+
+	@Override
 	public void onGuildMemberRemove(GuildMemberRemoveEvent event) {
-		if (scheduler.isWarningTimerRunning(event.getGuild().getIdLong(), event.getUser().getIdLong())) {
-			logger.info("Member {} left {} while warning timer running. Removing timer...", event.getUser(),
-					event.getGuild());
-			scheduler.removeWarningTimer(event.getGuild().getIdLong(), event.getUser().getIdLong());
+		Guild guild = event.getGuild();
+		User user = event.getUser();
+
+		if (scheduler.isWarningTimerRunning(guild.getIdLong(), user.getIdLong())) {
+			logger.info("Member {} left {} while warning timer running. Removing timer...", user, guild);
+			scheduler.removeWarningTimer(guild.getIdLong(), user.getIdLong());
 		}
 	}
 
@@ -555,6 +570,12 @@ public class JailSystemImpl extends ListenerAdapter
 					// Check if member is jailed
 					if (!isJailed(member)) {
 						error(event, "customjail.notJailed").queue();
+						return;
+					}
+
+					// Ensure button belongs to who pressed it
+					if (!pressed.equals(member)) {
+						error(event, "customjail.not-your-punishment").queue();
 						return;
 					}
 
@@ -620,10 +641,8 @@ public class JailSystemImpl extends ListenerAdapter
 					() -> {
 						MessageEmbed errorMsg = Response.error(messages.getMessage("customjail.embed.no-target", null,
 								event.getUserLocale().toLocale()));
-						RestAction<?> edit = (event.isAcknowledged()
-								? event.getHook().editOriginalEmbeds(errorMsg).setReplace(true)
-								: event.replyEmbeds(errorMsg).setEphemeral(true));
-						event.editButton(event.getButton().asDisabled()).flatMap(o -> edit).queue();
+						event.replyEmbeds(errorMsg).setEphemeral(true)
+								.and(event.editButton(event.getButton().asDisabled())).queue();
 					});
 		}))
 			return;

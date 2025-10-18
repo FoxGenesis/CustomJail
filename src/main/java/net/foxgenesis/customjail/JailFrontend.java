@@ -497,7 +497,7 @@ public class JailFrontend extends ListenerAdapter {
 			if (arg instanceof MessageSourceResolvable resolvable)
 				resolved[i] = messages.getMessage(resolvable, locale);
 		}
-		builder.append(String.format("**%s:** %s\n", args));
+		builder.append(String.format("**%s:** %s\n", resolved));
 	}
 
 	private SelectMenu getTimeMenu(Locale locale) {
