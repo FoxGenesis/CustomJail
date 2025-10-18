@@ -14,8 +14,8 @@ import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Member;
-import net.foxgenesis.customjail.util.Utilities;
 import net.foxgenesis.springJDA.annotation.Snowflake;
+import net.foxgenesis.watame.util.StringUtils;
 
 @Entity
 @Table(indexes = @Index(columnList = "guild, member"))
@@ -62,9 +62,9 @@ public class Warning {
 	public Warning(Member member, Member moderator, String reason, boolean active) {
 		this(member.getGuild().getIdLong(), member.getIdLong(), moderator.getIdLong(), reason, active);
 	}
-	
+
 	public Warning(Warning other) {
-		this(other.guild, other.member ,other.moderator, other.reason, other.active);
+		this(other.guild, other.member, other.moderator, other.reason, other.active);
 	}
 
 	public long getId() {
@@ -116,7 +116,7 @@ public class Warning {
 	}
 
 	public void setReason(String reason) {
-		this.reason = Utilities.nullIfBlank(reason);
+		this.reason = StringUtils.nullIfBlank(reason);
 	}
 
 	public Instant getTime() {
@@ -134,7 +134,7 @@ public class Warning {
 	public void setActive(boolean active) {
 		this.active = active;
 	}
-	
+
 	public Warning copy() {
 		return new Warning(this);
 	}

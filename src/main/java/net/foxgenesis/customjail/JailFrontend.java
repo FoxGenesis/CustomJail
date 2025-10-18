@@ -66,7 +66,6 @@ public class JailFrontend extends ListenerAdapter {
 					if (jail.isJailed(event.getTargetMember()))
 						error(event, "customjail.alreadyJailed").queue();
 					else
-//						new JailUserListener(event);
 						displayJailModal(event);
 
 			}
@@ -100,14 +99,15 @@ public class JailFrontend extends ListenerAdapter {
 		}
 	}
 
+	@SuppressWarnings("incomplete-switch")
 	@Override
 	public void onButtonInteraction(ButtonInteractionEvent event) {
 		if (!event.isFromGuild())
 			return;
 		if (Utilities.Interactions.unwrapInteraction(event, (id, unwrappedMember, variant) -> {
 			unwrappedMember.ifPresentOrElse(member -> {
-				switch (id) {
-				case "forcestart" -> {
+				switch (Utilities.Interactions.WrappedInteractions.parse(id)) {
+				case FORCE_START -> {
 					if (jail.isJailTimerRunning(member)) {
 						error(event, "customjail.timer-already-started").queue();
 						return;
@@ -115,7 +115,7 @@ public class JailFrontend extends ListenerAdapter {
 					// Display reason modal
 					displayReasonModal(event, () -> member, "forcestart");
 				}
-				case "unjail" -> {
+				case UNJAIL -> {
 					if (!jail.isJailed(member)) {
 						error(event, "customjail.notJailed").queue();
 						return;
@@ -127,17 +127,16 @@ public class JailFrontend extends ListenerAdapter {
 			},
 					// Unable to find member button was wrapped to
 					() -> {
-						MessageEmbed errorMsg = Response.error(
-								messages.getMessage("customjail.embed.no-target", event.getUserLocale().toLocale()));
-						RestAction<?> edit = (event.isAcknowledged()
-								? event.getHook().editOriginalEmbeds(errorMsg).setReplace(true)
-								: event.replyEmbeds(errorMsg).setEphemeral(true));
-						event.editButton(event.getButton().asDisabled()).flatMap(o -> edit).queue();
+						MessageEmbed errorMsg = Response.error(messages.getMessage("customjail.embed.no-target", null,
+								event.getUserLocale().toLocale()));
+						event.replyEmbeds(errorMsg).setEphemeral(true)
+								.and(event.editButton(event.getButton().asDisabled())).queue();
 					});
 		}))
 			return;
 	}
 
+	@SuppressWarnings("incomplete-switch")
 	@Override
 	public void onModalInteraction(ModalInteractionEvent event) {
 		// Only work with guild buttons
@@ -146,9 +145,9 @@ public class JailFrontend extends ListenerAdapter {
 
 		if (Utilities.Interactions.unwrapInteraction(event, (id, unwrappedMember, variant) -> {
 			unwrappedMember.ifPresentOrElse(member -> {
-				switch (id) {
+				switch (Utilities.Interactions.WrappedInteractions.parse(id)) {
 				// Callback from jail user modal
-				case "jailuser" -> {
+				case JAIL_USER -> {
 					if (isValidUser(event, member))
 						if (jail.isJailed(member)) {
 							error(event, "customjail.alreadyJailed").queue();
@@ -169,7 +168,7 @@ public class JailFrontend extends ListenerAdapter {
 						return Response.success(response);
 					}).queue();
 				}
-				case "addreason" -> {
+				case ADD_REASON -> {
 					// Ensure the callback is valid
 					if (variant.isEmpty()) {
 						error(event, "watame.invalid-interaction").queue();
@@ -426,8 +425,8 @@ public class JailFrontend extends ListenerAdapter {
 		Locale locale = event.getUserLocale().toLocale();
 
 		Modal.Builder builder = Modal.create(
-				Utilities.Interactions.wrapInteraction("addreason",
-						wrappedMember != null ? wrappedMember.get() : event.getMember(), callback),
+				Utilities.Interactions.WrappedInteractions.ADD_REASON
+						.wrapInteraction(wrappedMember != null ? wrappedMember.get() : event.getMember(), callback),
 				messages.getMessage("customjail.modal.title", locale));
 
 		TextInput body = TextInput.create("reason", TextInputStyle.PARAGRAPH)
@@ -443,7 +442,8 @@ public class JailFrontend extends ListenerAdapter {
 		Member target = event.getTargetMember();
 
 		LocalizedModalBuilder builder = new LocalizedModalBuilder(messages, locale,
-				Utilities.Interactions.wrapInteraction("jailuser", target, "jailuser"), "customjail.embed.jail-user");
+				Utilities.Interactions.WrappedInteractions.JAIL_USER.wrapInteraction(target),
+				"customjail.embed.jail-user");
 
 		TextDisplay details = getJailModalDetails(target, locale);
 
