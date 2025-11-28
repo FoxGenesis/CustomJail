@@ -14,15 +14,7 @@ public class JailJob implements Job {
 	private static final Logger logger = LoggerFactory.getLogger(JailJob.class);
 
 	@Autowired
-	private JailSystem system;
-
-//	@Override
-//	protected void executeInternal(JobExecutionContext ctx) throws JobExecutionException {
-//		JailDetails details = JailDetails.resolveFromDataMap(ctx.getMergedJobDataMap());
-//
-//		logger.info("Jail job finished for member {} in {}: ", details.member(), details.guild(), details);
-//		system.unjail(details.guild(), details.member(), null, null);
-//	}
+	private transient JailSystem system;
 
 	@Override
 	public void execute(JobExecutionContext ctx) throws JobExecutionException {

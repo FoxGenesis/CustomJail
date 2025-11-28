@@ -2,6 +2,7 @@ package net.foxgenesis.customjail.jail;
 
 import java.util.NoSuchElementException;
 import java.util.Optional;
+import java.util.Set;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -17,6 +18,13 @@ import net.foxgenesis.customjail.database.warning.Warning;
  * @author Ashley
  */
 public interface WarningSystem {
+
+	default Set<Warning> getWarnings(Member member) {
+		return getWarnings(member.getGuild().getIdLong(), member.getIdLong());
+	}
+
+	Set<Warning> getWarnings(long guild, long member);
+
 	/**
 	 * Get the total amount of warnings for the specified {@link Member}.
 	 * 
@@ -73,6 +81,6 @@ public interface WarningSystem {
 	void clearWarnings(Member member, Member moderator, String reason);
 
 	void clearWarnings(Guild guild);
-	
+
 	Optional<String> getWarningEndTimestamp(Member member);
 }
