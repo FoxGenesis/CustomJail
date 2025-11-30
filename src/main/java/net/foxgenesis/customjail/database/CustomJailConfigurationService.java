@@ -46,21 +46,6 @@ public class CustomJailConfigurationService {
 		}).orElse(Set.of());
 	}
 
-//	private List<Role> getWarningRoles(Guild guild) {
-//		return get(guild)
-//				// Map
-//				.map(config -> guild.getRoles()
-//						// Stream
-//						.stream()
-//						// Filter roles that start with prefix
-//						.filter(r -> r.getName().startsWith(config.getWarningsPrefix()))
-//						// Reverse order
-//						.sorted(Comparator.reverseOrder())
-//						// As set
-//						.toList())
-//				.orElseThrow();
-//	}
-
 	public boolean isEnabled(Guild guild) {
 		return get(guild).map(CustomJailConfiguration::isEnabled).orElse(false);
 	}

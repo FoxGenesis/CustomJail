@@ -118,7 +118,7 @@ public class JailSystemImpl extends ListenerAdapter implements JailSystem {
 
 	@Autowired
 	private WatameUtils watame;
-	
+
 	@Autowired
 	private ApplicationEventPublisher publisher;
 
@@ -604,8 +604,8 @@ public class JailSystemImpl extends ListenerAdapter implements JailSystem {
 								return newContainer.replace(ComponentReplacer.of(Button.class,
 										button -> button.getCustomId().startsWith("startjail"),
 										button -> Button
-												.success("jailAccepted",
-														messages().getMessage("customjail.embed.accepted", null, locale))
+												.success("jailAccepted", messages()
+														.getMessage("customjail.embed.accepted", null, locale))
 												.asDisabled()));
 							});
 
@@ -645,10 +645,10 @@ public class JailSystemImpl extends ListenerAdapter implements JailSystem {
 			},
 					// Unable to find member button was wrapped to
 					() -> {
-						MessageEmbed errorMsg = Response.error(messages().getMessage("customjail.embed.no-target", null,
-								event.getUserLocale().toLocale()));
+						MessageEmbed errorMsg = Response.error(
+								messages().getMessage("customjail.no-target", null, event.getUserLocale().toLocale()));
 						event.replyEmbeds(errorMsg).setEphemeral(true)
-								.and(event.editButton(event.getButton().asDisabled())).queue();
+								.flatMap(v -> event.editButton(event.getButton().asDisabled())).queue();
 					});
 		}))
 			return;
