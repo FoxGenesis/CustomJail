@@ -1,21 +1,28 @@
 package net.foxgenesis.customjail.jail;
 
-import java.time.Instant;
-import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 
 import org.quartz.JobDataMap;
-import org.springframework.context.MessageSource;
+import org.springframework.context.MessageSourceResolvable;
+import org.springframework.context.support.DefaultMessageSourceResolvable;
 
+import net.dv8tion.jda.api.components.buttons.Button;
+import net.dv8tion.jda.api.components.buttons.ButtonStyle;
 import net.dv8tion.jda.api.entities.Member;
+import net.foxgenesis.customjail.CommonMessages;
 import net.foxgenesis.customjail.util.CustomTime;
+import net.foxgenesis.customjail.util.Utilities;
+import net.foxgenesis.watame.util.StringUtils;
 import net.foxgenesis.watame.util.discord.Colors;
 import net.foxgenesis.watame.util.discord.DiscordUtils;
-import net.foxgenesis.watame.util.lang.LocalizedEmbedBuilder;
+import net.foxgenesis.watame.util.lang.LocalizedContainerBuilder;
+import net.foxgenesis.watame.util.lang.LocalizedSectionBuilder;
 
 public record JailDetails(long guild, long member, Long moderator, CustomTime duration, String reason, long caseid,
 		long timestamp) {
+
+	private static final String BOLD_FIELD = "**%s:** %s";
 
 	private static final String KEY_GUILD = "guild-id";
 	private static final String KEY_MEMBER = "member-id";
@@ -76,34 +83,58 @@ public record JailDetails(long guild, long member, Long moderator, CustomTime du
 		return new JailDetails(guild, member, modId, duration, reason, caseid, timestamp);
 	}
 
-	public void applyToEmbedBuilder(LocalizedEmbedBuilder builder, MessageSource source, Locale locale, Member member,
+	private static final MessageSourceResolvable JAILED_BY = new DefaultMessageSourceResolvable(
+			"customjail.container.jailed-by");
+	private static final MessageSourceResolvable TIME_LEFT = new DefaultMessageSourceResolvable(
+			"customjail.embed.time-left");
+	private static final MessageSourceResolvable NOT_ACCEPTED = new DefaultMessageSourceResolvable(
+			"customjail.embed.not-accepted");
+
+	public void applyToContainerBuilder(LocalizedContainerBuilder cb, Member member,
 			Optional<String> jailEndTimestamp) {
+		cb.setColor(Colors.INFO);
+		LocalizedSectionBuilder sb = cb.getNewLocalizedSectionBuilder();
 		boolean isTimerRunning = jailEndTimestamp.isPresent();
 
-		builder.setColor(Colors.INFO);
-		builder.setThumbnail(member.getEffectiveAvatarUrl());
-		builder.setLocalizedTitle("customjail.embed.jaildetails");
-		builder.addLocalizedField("customjail.embed.member", DiscordUtils.mentionUser(this.member), true);
-		builder.addLocalizedField("customjail.embed.moderator", DiscordUtils.mentionUser(moderator), true);
+		Button unjail = sb.newLocalizedButton(ButtonStyle.DANGER,
+				Utilities.Interactions.wrapInteraction("unjail", member), CommonMessages.UNJAIL);
+		Button forcestart = sb.newLocalizedButton(ButtonStyle.DANGER,
+				Utilities.Interactions.wrapInteraction("forcestart", member), CommonMessages.FORCESTART)
+				.withDisabled(isTimerRunning);
 
-		builder.addLocalizedField("customjail.embed.caseid",
-				caseid != -1 ? "" + caseid : source.getMessage("customjail.embed.na", null, locale), true);
+		// Section 1
+		sb.setThumbnailUrl(member.getEffectiveAvatarUrl());
+		sb.addLocalizedTextDisplay(CommonMessages.JAIL_DETAILS);
+		sb.addLocalizedTextDisplay("customjail.container.jaildetails-for", DiscordUtils.mentionUser(this.member));
+		cb.addSectionAndClear(sb);
 
-		builder.addLocalizedFieldAndValue("customjail.embed.accepted",
-				isTimerRunning ? "customjail.embed.yes" : "customjail.embed.no", true, null);
+		cb.addSmallDividingSeparator();
 
-		builder.addLocalizedField("customjail.embed.duration", duration.getLocalizedDisplayString(source, locale),
-				true);
+		// Section 2
+		sb.setButton(unjail);
+		sb.addLocalizedFormattedTextDisplay(BOLD_FIELD, JAILED_BY, DiscordUtils.mentionUser(moderator));
+		sb.addLocalizedFormattedTextDisplay(BOLD_FIELD, CommonMessages.CASE_ID,
+				caseid != -1 ? caseid : CommonMessages.NA);
+		sb.addLocalizedFormattedTextDisplay(BOLD_FIELD, CommonMessages.DURATION,
+				duration.getLocalizedDisplayString(sb.getMessageSource(), sb.getLocale()));
+		cb.addSectionAndClear(sb);
 
-		String endTime = isTimerRunning
-				? jailEndTimestamp.orElseGet(() -> source.getMessage("customjail.embed.na", null, locale))
-				: source.getMessage("customjail.embed.not-accepted", null, locale);
-		builder.addLocalizedField("customjail.embed.time-left", endTime, true);
+		cb.addSmallDividingSeparator();
 
-		builder.addLocalizedField("customjail.embed.reason", Optional.ofNullable(reason)
-				.orElseGet(() -> source.getMessage("customjail.embed.defaultReason", null, locale)), false);
-		builder.setLocalizedFooter("customjail.footer");
+		// Section 3
+		sb.setButton(forcestart);
+		sb.addLocalizedFormattedTextDisplay(BOLD_FIELD, CommonMessages.ACCEPTED,
+				isTimerRunning ? CommonMessages.YES : CommonMessages.NO);
+		sb.addLocalizedFormattedTextDisplay(BOLD_FIELD, TIME_LEFT,
+				isTimerRunning ? jailEndTimestamp.get() : NOT_ACCEPTED);
+		cb.addSectionAndClear(sb);
 
-		builder.setTimestamp(Instant.ofEpochMilli(timestamp));
+		cb.addSmallDividingSeparator();
+
+		cb.addLocalizedFormattedTextDisplay("### %s", CommonMessages.REASON);
+		if (StringUtils.nullIfBlank(reason) == null)
+			cb.addLocalizedTextDisplay(CommonMessages.DEFAULT_REASON);
+		else
+			cb.addTextDisplay(reason);
 	}
 }

@@ -4,51 +4,47 @@ import java.util.Arrays;
 import java.util.Locale;
 import java.util.NoSuchElementException;
 import java.util.Objects;
-import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
 import java.util.function.Supplier;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.MessageSourceResolvable;
 
+import net.dv8tion.jda.api.components.label.Label;
+import net.dv8tion.jda.api.components.selections.SelectMenu;
+import net.dv8tion.jda.api.components.selections.SelectOption;
+import net.dv8tion.jda.api.components.selections.StringSelectMenu;
+import net.dv8tion.jda.api.components.textdisplay.TextDisplay;
+import net.dv8tion.jda.api.components.textinput.TextInput;
+import net.dv8tion.jda.api.components.textinput.TextInputStyle;
 import net.dv8tion.jda.api.entities.Member;
-import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.MessageEmbed;
 import net.dv8tion.jda.api.entities.User;
-import net.dv8tion.jda.api.entities.emoji.Emoji;
 import net.dv8tion.jda.api.events.interaction.ModalInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.command.UserContextInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.component.GenericComponentInteractionCreateEvent;
-import net.dv8tion.jda.api.events.interaction.component.StringSelectInteractionEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.interactions.InteractionHook;
 import net.dv8tion.jda.api.interactions.callbacks.IReplyCallback;
 import net.dv8tion.jda.api.interactions.commands.OptionMapping;
-import net.dv8tion.jda.api.interactions.components.ActionRow;
-import net.dv8tion.jda.api.interactions.components.buttons.Button;
-import net.dv8tion.jda.api.interactions.components.selections.SelectMenu;
-import net.dv8tion.jda.api.interactions.components.selections.SelectOption;
-import net.dv8tion.jda.api.interactions.components.selections.StringSelectMenu;
-import net.dv8tion.jda.api.interactions.components.text.TextInput;
-import net.dv8tion.jda.api.interactions.components.text.TextInputStyle;
-import net.dv8tion.jda.api.interactions.modals.Modal;
+import net.dv8tion.jda.api.modals.Modal;
 import net.dv8tion.jda.api.requests.RestAction;
 import net.dv8tion.jda.api.requests.restaction.interactions.ReplyCallbackAction;
+import net.dv8tion.jda.api.utils.MarkdownUtil;
 import net.foxgenesis.customjail.database.warning.Warning;
 import net.foxgenesis.customjail.jail.JailDetails;
 import net.foxgenesis.customjail.jail.JailSystem;
 import net.foxgenesis.customjail.jail.exception.LocalizedException;
 import net.foxgenesis.customjail.util.CustomTime;
 import net.foxgenesis.customjail.util.Utilities;
-import net.foxgenesis.watame.util.discord.Colors;
 import net.foxgenesis.watame.util.discord.DiscordUtils;
-import net.foxgenesis.watame.util.discord.InteractionListener;
-import net.foxgenesis.watame.util.discord.Response;
+import net.foxgenesis.watame.util.discord.components.Response;
 import net.foxgenesis.watame.util.lang.DiscordLocaleMessageSource;
-import net.foxgenesis.watame.util.lang.LocalizedEmbedBuilder;
+import net.foxgenesis.watame.util.lang.Localized;
+import net.foxgenesis.watame.util.lang.LocalizedContainerBuilder;
+import net.foxgenesis.watame.util.lang.LocalizedModalBuilder;
 
 public class JailFrontend extends ListenerAdapter {
 
@@ -70,7 +66,8 @@ public class JailFrontend extends ListenerAdapter {
 					if (jail.isJailed(event.getTargetMember()))
 						error(event, "customjail.alreadyJailed").queue();
 					else
-						new JailUserListener(event);
+//						new JailUserListener(event);
+						displayJailModal(event);
 
 			}
 			case "Jail Details" -> {
@@ -81,33 +78,22 @@ public class JailFrontend extends ListenerAdapter {
 					if (!jail.isJailed(member))
 						error(event, "customjail.notJailed").queue();
 					else if (isNonBotUser(event, member)) {
-						Optional<String> jailEndTimestamp = jail.getJailEndTimestamp(member);
-						boolean isTimerRunning = jailEndTimestamp.isPresent();
-
 						// Create embed
 						JailDetails details = jail.getJailDetails(member);
 
-						LocalizedEmbedBuilder builder = new LocalizedEmbedBuilder(messages, locale);
-						details.applyToEmbedBuilder(builder, messages, locale, member,
-								jail.getJailEndTimestamp(member));
-
-						MessageEmbed embed = builder.build();
-
-						// Create actions
-						ActionRow interactions = ActionRow.of(
-								Button.danger(Utilities.Interactions.wrapInteraction("forcestart", member),
-										messages.getMessage("customjail.embed.forcestart", locale))
-										.withDisabled(isTimerRunning),
-								Button.danger(Utilities.Interactions.wrapInteraction("unjail", member),
-										messages.getMessage("customjail.embed.unjail", locale)));
+						LocalizedContainerBuilder cb = new LocalizedContainerBuilder(messages, locale);
+						details.applyToContainerBuilder(cb, member, jail.getJailEndTimestamp(member));
 
 						// Reply with embed and actions
-						event.replyEmbeds(embed).setComponents(interactions).setEphemeral(true).queue();
+						event.replyComponents(cb.build())
+								// This is required any time you are using Components V2
+								.useComponentsV2().setEphemeral(true).queue();
 					}
 			}
 			case "View Warnings" -> {
 				if (isValidUser(event, event.getTargetMember())) {
-					new WarningPage(event, jail, event.getTargetMember(), messages);
+					// new WarningPage(event, jail, event.getTargetMember(), messages);
+					new WarningPageContainer(event, jail, event.getTargetMember(), messages);
 				}
 			}
 			}
@@ -161,6 +147,28 @@ public class JailFrontend extends ListenerAdapter {
 		if (Utilities.Interactions.unwrapInteraction(event, (id, unwrappedMember, variant) -> {
 			unwrappedMember.ifPresentOrElse(member -> {
 				switch (id) {
+				// Callback from jail user modal
+				case "jailuser" -> {
+					if (isValidUser(event, member))
+						if (jail.isJailed(member)) {
+							error(event, "customjail.alreadyJailed").queue();
+							return;
+						}
+
+					CustomTime duration = event.getValue("time-selection").getAsStringList().stream()
+							.reduce((a, b) -> a + b).map(CustomTime::new).orElseThrow();
+					boolean active = Boolean.valueOf(event.getValue("add-warning").getAsStringList().get(0));
+					boolean anon = Boolean.valueOf(event.getValue("anon").getAsStringList().get(0));
+					String reason = event.getValue("reason").getAsString();
+
+					attemptAction(event, (hook, locale) -> {
+						jail.jail(member, event.getMember(), duration, reason, active, anon);
+
+						String response = messages.getMessage("customjail.embed.jailed-user", new Object[] {
+								member.getAsMention(), duration.getLocalizedDisplayString(messages, locale) }, locale);
+						return Response.success(response);
+					}).queue();
+				}
 				case "addreason" -> {
 					// Ensure the callback is valid
 					if (variant.isEmpty()) {
@@ -275,7 +283,7 @@ public class JailFrontend extends ListenerAdapter {
 		case "list" -> {
 			Member member = event.getOption("user", OptionMapping::getAsMember);
 			if (isNonBotUser(event, member))
-				new WarningPage(event, jail, member, messages);
+				new WarningPageContainer(event, jail, member, messages);
 		}
 		// Add warning
 		case "add" -> {
@@ -422,187 +430,93 @@ public class JailFrontend extends ListenerAdapter {
 						wrappedMember != null ? wrappedMember.get() : event.getMember(), callback),
 				messages.getMessage("customjail.modal.title", locale));
 
-		TextInput body = TextInput
-				.create("reason", messages.getMessage("customjail.embed.reason", locale), TextInputStyle.PARAGRAPH)
+		TextInput body = TextInput.create("reason", TextInputStyle.PARAGRAPH)
 				.setPlaceholder(messages.getMessage("customjail.modal.placeholder", locale)).setMinLength(3)
 				.setMaxLength(500).setRequired(false).build();
 
-		builder.addActionRow(body);
+		builder.addComponents(Label.of(messages.getMessage(CommonMessages.REASON, locale), body));
 		event.replyModal(builder.build()).queue();
 	}
 
-	private class JailUserListener extends InteractionListener {
-		private CompletableFuture<Void> expirationFuture;
+	private void displayJailModal(UserContextInteractionEvent event) {
+		Locale locale = event.getUserLocale().toLocale();
+		Member target = event.getTargetMember();
 
-		private final Member member;
-		private final int warningLevel;
-		private final int warnings;
-		private final String warningExpires;
+		LocalizedModalBuilder builder = new LocalizedModalBuilder(messages, locale,
+				Utilities.Interactions.wrapInteraction("jailuser", target, "jailuser"), "customjail.embed.jail-user");
 
-		private CustomTime time;
+		TextDisplay details = getJailModalDetails(target, locale);
 
-		public JailUserListener(UserContextInteractionEvent event) {
-			super(event);
-			this.member = event.getTargetMember();
-			this.warningLevel = jail.getWarningLevel(member);
-			this.warnings = jail.getTotalWarnings(member);
-			this.warningExpires = jail.getWarningEndTimestamp(member)
-					.orElseGet(() -> messages.getMessage("customjail.embed.na", locale));
+		TextInput body = TextInput.create("reason", TextInputStyle.PARAGRAPH)
+				.setPlaceholder(messages.getMessage("customjail.modal.placeholder", locale)).setMinLength(3)
+				.setMaxLength(500).setRequired(false).build();
 
-			ActionRow interactions = ActionRow.of(getAddWarningButton(true), addAnonButton(true),
-					Button.danger("jailuser", messages.getMessage("customjail.embed.jail-user", locale)).asDisabled());
+		SelectOption[] yesNo = new SelectOption[] {
+				SelectOption.of(messages.getMessage(CommonMessages.YES, locale), Boolean.TRUE.toString()),
+				SelectOption.of(messages.getMessage(CommonMessages.NO, locale), Boolean.FALSE.toString()) };
+		SelectMenu addWarning = StringSelectMenu.create("add-warning").addOptions(yesNo).setDefaultOptions(yesNo[0])
+				.setRequired(true).build();
+		SelectMenu anon = StringSelectMenu.create("anon").addOptions(yesNo).setDefaultOptions(yesNo[0])
+				.setRequired(true).build();
 
-			InteractionHook hook = event.getHook();
-			event.replyEmbeds(createJailEmbed())
-					// Add time menu
-					.addActionRow(getTimeMenu())
-					// Add buttons
-					.addComponents(interactions)
-					// Set user only
-					.setEphemeral(true)
-					// Send
-					.queue(v -> {
-						hook.getJDA().addEventListener(this);
-						expirationFuture = CompletableFuture.runAsync(() -> {
-							hook.getJDA().removeEventListener(this);
-							hook.editOriginalEmbeds(
-									Response.error(messages.getMessage("watame.interaction.expired", null, locale)))
-									.setReplace(true).queue();
-						}, CompletableFuture.delayedExecutor(894, TimeUnit.SECONDS));
-					});
+		SelectMenu timeMenu = getTimeMenu(locale);
+
+		builder.addComponents(details);
+		builder.addLocalizedLabelWithDescription(CommonMessages.DURATION,
+				Localized.resolved("customjail.embed.duration-description"), timeMenu);
+		builder.addLocalizedLabelWithDescription(CommonMessages.WITH_WARNING,
+				Localized.resolved("customjail.embed.with-warning-description"), addWarning);
+		builder.addLocalizedLabelWithDescription(CommonMessages.ANONYMOUS,
+				Localized.resolved("customjail.embed.anonymous-description"), anon);
+
+		builder.addLocalizedLabelWithDescription(CommonMessages.REASON,
+				Localized.resolved("customjail.embed.reason-description"), body);
+
+		event.replyModal(builder.build()).queue();
+	}
+
+	private TextDisplay getJailModalDetails(Member target, Locale locale) {
+		int warningLevel = jail.getWarningLevel(target);
+		int totalWarnings = jail.getTotalWarnings(target);
+		Object expires = jail.getWarningEndTimestamp(target).map(Object.class::cast).orElse(CommonMessages.NA);
+
+		StringBuilder builder = new StringBuilder();
+
+		appendBoldField(builder, locale, CommonMessages.MEMBER, target.getAsMention());
+		appendBoldField(builder, locale, CommonMessages.WARNING_LEVEL, MarkdownUtil.monospace(warningLevel + ""));
+		appendBoldField(builder, locale, CommonMessages.TOTAL_WARNINGS, MarkdownUtil.monospace(totalWarnings + ""));
+		appendBoldField(builder, locale, CommonMessages.WARNING_EXPIRES, expires);
+
+		return TextDisplay.of(builder.toString());
+	}
+
+	private void appendBoldField(StringBuilder builder, Locale locale, Object... args) {
+		Object[] resolved = Arrays.copyOf(args, args.length);
+		for (int i = 0; i < resolved.length; i++) {
+			Object arg = resolved[i];
+			if (arg instanceof MessageSourceResolvable resolvable)
+				resolved[i] = messages.getMessage(resolvable, locale);
 		}
+		builder.append(String.format("**%s:** %s\n", resolved));
+	}
 
-		@Override
-		public void onButtonInteraction(ButtonInteractionEvent event) {
-			if (!shouldRespond(event))
-				return;
-			switch (event.getButton().getId()) {
-			case "with-warning" -> event.editButton(getAddWarningButton(false)).queue();
-			case "without-warning" -> event.editButton(getAddWarningButton(true)).queue();
-			case "anon" -> event.editButton(addAnonButton(false)).queue();
-			case "non-anon" -> event.editButton(addAnonButton(true)).queue();
-			case "jailuser" -> event.replyModal(createJailModal(member)).queue();
-			}
-		}
+	private SelectMenu getTimeMenu(Locale locale) {
+		SelectOption[] options = Arrays
+				// Stream times
+				.stream(jail.getJailTimings())
+				// Create select option
+				.map(time -> SelectOption.of(new CustomTime(time).getLocalizedDisplayString(messages, locale), time))
+				// To array
+				.toArray(SelectOption[]::new);
 
-		@Override
-		public void onStringSelectInteraction(StringSelectInteractionEvent event) {
-			if (!shouldRespond(event))
-				return;
-			switch (event.getComponentId()) {
-			case "time-selection" -> {
-				time = event.getValues().stream().reduce((a, b) -> a + b).map(CustomTime::new).orElseThrow();
-
-				Message message = event.getMessage();
-				Button withWarning = message.getButtonById("with-warning"),
-						withoutWarning = message.getButtonById("without-warning"), anon = message.getButtonById("anon"),
-						nonAnon = message.getButtonById("non-anon"), jailButton = message.getButtonById("jailuser");
-
-				event.editComponents(
-						ActionRow.of(event.getSelectMenu().createCopy().setDefaultValues(event.getValues()).build()),
-						ActionRow.of(withWarning != null ? withWarning : withoutWarning, anon != null ? anon : nonAnon,
-								jailButton.asEnabled()))
-						.queue();
-			}
-			}
-		}
-
-		@Override
-		public void onModalInteraction(ModalInteractionEvent event) {
-			Message.Interaction interactionContext = event.getMessage().getInteraction();
-			if (interactionContext != null && interactionContext.getIdLong() == id) {
-				Message message = event.getMessage();
-
-				boolean withWarning = message.getButtonById("with-warning") != null;
-				boolean anon = message.getButtonById("anon") != null;
-				String reason = event.getValue("reason").getAsString();
-
-				expirationFuture.cancel(true);
-				event.getJDA().removeEventListener(this);
-
-				event.deferEdit().flatMap(hook -> {
-					Locale locale = event.getUserLocale().toLocale();
-
-					MessageEmbed embed = null;
-					try {
-						jail.jail(member, event.getMember(), time, reason, withWarning, anon);
-
-						embed = Response.success(messages.getMessage("customjail.embed.jailed-user", new Object[] {
-								member.getAsMention(), time.getLocalizedDisplayString(messages, locale) }, locale));
-					} catch (LocalizedException e) {
-						embed = Response.error(messages.getMessage(e.getErrorMessage(), locale));
-					} catch (Exception e) {
-						embed = Response.error(DiscordUtils.toString(e));
-					}
-
-					return hook.editOriginalEmbeds(embed != null ? embed : Response.error("Uknown error while jailing"))
-							.setReplace(true);
-				}).queue();
-			}
-		}
-
-		private MessageEmbed createJailEmbed() {
-			LocalizedEmbedBuilder builder = new LocalizedEmbedBuilder(messages, locale);
-			builder.setColor(Colors.INFO);
-			builder.setLocalizedTitle("customjail.embed.jail-user");
-			builder.setThumbnail(member.getEffectiveAvatarUrl());
-
-			builder.addLocalizedField("customjail.embed.member", member.getAsMention(), true);
-			builder.addLocalizedField("customjail.embed.warning-level", "" + warningLevel, true);
-			builder.addLocalizedField("customjail.embed.total-warnings", "" + warnings, true);
-			builder.addLocalizedField("customjail.embed.warning-expires", warningExpires, false);
-			return builder.build();
-		}
-
-		private Button addAnonButton(boolean anon) {
-			return anon
-					? Button.primary("anon", messages.getMessage("customjail.embed.anon", locale))
-							.withEmoji(Emoji.fromFormatted("U+1F92B"))
-					: Button.secondary("non-anon", messages.getMessage("customjail.embed.non-anon", locale))
-							.withEmoji(Emoji.fromFormatted("U+1F4E3"));
-		}
-
-		private Button getAddWarningButton(boolean addWarning) {
-			return addWarning
-					? Button.primary("with-warning", messages.getMessage("customjail.embed.with-warning", locale))
-							.withEmoji(Emoji.fromFormatted("U+2705"))
-					: Button.secondary("without-warning",
-							messages.getMessage("customjail.embed.without-warning", locale))
-							.withEmoji(Emoji.fromFormatted("U+274C"));
-		}
-
-		private SelectMenu getTimeMenu() {
-			SelectOption[] options = Arrays
-					// Stream times
-					.stream(jail.getJailTimings())
-					// Create select option
-					.map(time -> SelectOption.of(new CustomTime(time).getLocalizedDisplayString(messages, locale),
-							time))
-					// To array
-					.toArray(SelectOption[]::new);
-
-			return StringSelectMenu
-					// Set ID
-					.create("time-selection")
-					// Set placeholder
-					.setPlaceholder(messages.getMessage("customjail.embed.set-time", locale))
-					// Add time options
-					.addOptions(options)
-					// Build
-					.build();
-		}
-
-		private Modal createJailModal(Member member) {
-			Modal.Builder builder = Modal.create(Utilities.Interactions.wrapInteraction("jailuser", member),
-					messages.getMessage("customjail.modal.title", locale));
-
-			TextInput body = TextInput
-					.create("reason", messages.getMessage("customjail.embed.reason", locale), TextInputStyle.PARAGRAPH)
-					.setPlaceholder(messages.getMessage("customjail.modal.placeholder", locale)).setMinLength(3)
-					.setMaxLength(500).setRequired(false).build();
-
-			builder.addActionRow(body);
-			return builder.build();
-		}
+		return StringSelectMenu
+				// Set ID
+				.create("time-selection")
+				// Set placeholder
+				.setPlaceholder(messages.getMessage("customjail.embed.set-time", locale))
+				// Add time options
+				.addOptions(options)
+				// Build
+				.build();
 	}
 }

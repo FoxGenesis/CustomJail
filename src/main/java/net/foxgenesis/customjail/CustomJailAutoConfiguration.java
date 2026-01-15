@@ -27,6 +27,7 @@ import org.springframework.scheduling.quartz.SchedulerFactoryBean;
 
 import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.interactions.DiscordLocale;
+import net.dv8tion.jda.api.interactions.InteractionContextType;
 import net.dv8tion.jda.api.interactions.commands.Command;
 import net.dv8tion.jda.api.interactions.commands.Command.Choice;
 import net.dv8tion.jda.api.interactions.commands.DefaultMemberPermissions;
@@ -194,7 +195,7 @@ public class CustomJailAutoConfiguration implements SchedulerFactoryBeanCustomiz
 			LocalizationFunction localization) {
 		return Commands.user(id)
 				// Set guild only
-				.setGuildOnly(true)
+				.setContexts(InteractionContextType.GUILD)
 				// Set default permissions
 				.setDefaultPermissions(permissions)
 				// Set localization
@@ -205,7 +206,7 @@ public class CustomJailAutoConfiguration implements SchedulerFactoryBeanCustomiz
 			LocalizationFunction localization) {
 		return Commands.slash(id, description)
 				// Set guild only
-				.setGuildOnly(true)
+				.setContexts(InteractionContextType.GUILD)
 				// Set default permissions
 				.setDefaultPermissions(permissions)
 				// Set localization

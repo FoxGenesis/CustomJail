@@ -12,7 +12,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -24,15 +23,19 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEvent;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.context.ApplicationEventPublisherAware;
-import org.springframework.context.MessageSource;
-import org.springframework.context.MessageSourceAware;
 import org.springframework.context.event.EventListener;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.lang.Nullable;
 
+import lombok.Setter;
 import net.dv8tion.jda.api.Permission;
+import net.dv8tion.jda.api.components.actionrow.ActionRow;
+import net.dv8tion.jda.api.components.buttons.Button;
+import net.dv8tion.jda.api.components.buttons.ButtonStyle;
+import net.dv8tion.jda.api.components.container.Container;
+import net.dv8tion.jda.api.components.replacer.ComponentReplacer;
+import net.dv8tion.jda.api.components.textdisplay.TextDisplay;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.GuildVoiceState;
 import net.dv8tion.jda.api.entities.Member;
@@ -42,6 +45,7 @@ import net.dv8tion.jda.api.entities.User;
 import net.dv8tion.jda.api.entities.channel.concrete.PrivateChannel;
 import net.dv8tion.jda.api.entities.channel.middleman.GuildChannel;
 import net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel;
+import net.dv8tion.jda.api.events.guild.GuildBanEvent;
 import net.dv8tion.jda.api.events.guild.GuildLeaveEvent;
 import net.dv8tion.jda.api.events.guild.member.GuildMemberJoinEvent;
 import net.dv8tion.jda.api.events.guild.member.GuildMemberRemoveEvent;
@@ -49,13 +53,13 @@ import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
 import net.dv8tion.jda.api.exceptions.ErrorHandler;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.interactions.callbacks.IReplyCallback;
-import net.dv8tion.jda.api.interactions.components.buttons.Button;
-import net.dv8tion.jda.api.interactions.components.buttons.ButtonStyle;
 import net.dv8tion.jda.api.requests.ErrorResponse;
 import net.dv8tion.jda.api.requests.RestAction;
 import net.dv8tion.jda.api.requests.restaction.interactions.ReplyCallbackAction;
 import net.dv8tion.jda.api.utils.MarkdownUtil;
 import net.dv8tion.jda.api.utils.TimeFormat;
+import net.dv8tion.jda.api.utils.Timestamp;
+import net.foxgenesis.customjail.CommonMessages;
 import net.foxgenesis.customjail.database.CustomJailConfiguration;
 import net.foxgenesis.customjail.database.CustomJailConfigurationService;
 import net.foxgenesis.customjail.database.warning.Warning;
@@ -79,29 +83,29 @@ import net.foxgenesis.customjail.jail.exception.NotJailedException;
 import net.foxgenesis.customjail.jail.exception.NotSetupException;
 import net.foxgenesis.customjail.util.CustomTime;
 import net.foxgenesis.customjail.util.Utilities;
-import net.foxgenesis.springJDA.SpringJDA;
+import net.foxgenesis.watame.WatameUtils;
+import net.foxgenesis.watame.util.StringUtils;
 import net.foxgenesis.watame.util.discord.Colors;
-import net.foxgenesis.watame.util.discord.DiscordLogger;
 import net.foxgenesis.watame.util.discord.DiscordUtils;
-import net.foxgenesis.watame.util.discord.ModeratorActionEvent;
-import net.foxgenesis.watame.util.discord.Response;
+import net.foxgenesis.watame.util.discord.components.ComponentUtils;
+import net.foxgenesis.watame.util.discord.components.ModeratorActionEvent;
+import net.foxgenesis.watame.util.discord.components.Response;
+import net.foxgenesis.watame.util.lang.DiscordLocaleMessageSource;
+import net.foxgenesis.watame.util.lang.Localized;
+import net.foxgenesis.watame.util.lang.LocalizedContainerBuilder;
 import net.foxgenesis.watame.util.lang.LocalizedEmbedBuilder;
+import net.foxgenesis.watame.util.lang.LocalizedSectionBuilder;
 
 /**
  * Standard implementation of a {@link JailSystem}.
  * 
  * @author Ashley
  */
-public class JailSystemImpl extends ListenerAdapter
-		implements JailSystem, ApplicationEventPublisherAware, MessageSourceAware {
+public class JailSystemImpl extends ListenerAdapter implements JailSystem {
 
 	private final Logger logger = LoggerFactory.getLogger(JailSystem.class);
 
 	private final String[] timings;
-
-	private ApplicationEventPublisher publisher;
-
-	private MessageSource messages;
 
 	@Autowired
 	private CustomJailConfigurationService service;
@@ -110,13 +114,16 @@ public class JailSystemImpl extends ListenerAdapter
 	private WarningDatabase warningDatabase;
 
 	@Autowired
-	private DiscordLogger discordLogger;
-
-	@Autowired
 	private JailScheduler scheduler;
 
 	@Autowired
-	private SpringJDA jda;
+	private WatameUtils watame;
+
+	@Autowired
+	private ApplicationEventPublisher publisher;
+
+	@Setter
+	private boolean useComponentV2Logging = true;
 
 	public JailSystemImpl(String[] timings) {
 		this.timings = Objects.requireNonNull(timings);
@@ -186,18 +193,14 @@ public class JailSystemImpl extends ListenerAdapter
 						}
 
 						// Create the jail embed
-						Locale locale = discordLogger.getEffectiveLocale(guild);
-						MessageEmbed embed = createJailEmbed(member, moderator, warning.map(Warning::getId), time,
+						Locale locale = messages().getLocaleForGuild(guild);
+						Container container = createJailContainer(member, moderator, warning.map(Warning::getId), time,
 								reason, anon, locale);
-						Button button = Button.primary(Utilities.Interactions.wrapInteraction("startjail", member),
-								messages.getMessage("customjail.embed.accept", null, locale));
 
 						// Send jail message
-						return jailChannel.sendMessage(member.getAsMention())
-								// Set embeds
-								.setEmbeds(embed)
-								// Add accept button
-								.addActionRow(button)
+						return jailChannel.sendMessageComponents(container)
+								// Use V2
+								.useComponentsV2()
 								// Publish event on success
 								.onSuccess(m -> {
 									logger.info("{} jailed {} in {} for {} \"{}\"", moderator, member, guild,
@@ -237,7 +240,7 @@ public class JailSystemImpl extends ListenerAdapter
 			if (!scheduler.removeJailTimer(guild, member))
 				throw new RuntimeException("Failed to unjail member [" + member + "] in " + guild);
 
-			Guild _guild = jda.getGuildById(guild);
+			Guild _guild = watame.getJda().getGuildById(guild);
 			if (_guild == null)
 				throw new IllegalArgumentException("JDA unable to resolve guild " + guild);
 
@@ -297,42 +300,56 @@ public class JailSystemImpl extends ListenerAdapter
 		return scheduler.getJailEndTimestamp(member);
 	}
 
-	private MessageEmbed createJailEmbed(Member member, Member moderator, Optional<Long> caseId, CustomTime time,
+	private Container createJailContainer(Member member, Member moderator, Optional<Long> caseId, CustomTime time,
 			String reason, boolean anon, Locale locale) {
-		// Create the jail embed
-		LocalizedEmbedBuilder jailEmbedBuilder = new LocalizedEmbedBuilder(messages, locale);
-		jailEmbedBuilder.setColor(Colors.ERROR);
-		jailEmbedBuilder.setLocalizedTitle("customjail.embed.jailed");
-		jailEmbedBuilder.setThumbnail(member.getEffectiveAvatarUrl());
+		LocalizedContainerBuilder cb = watame.getContainerBuilder(locale);
+		LocalizedSectionBuilder sb = cb.getNewLocalizedSectionBuilder();
+		cb.setUniqueId(100);
+		cb.setColor(Colors.ERROR);
 
-		// Row 1
-		jailEmbedBuilder.addLocalizedField("customjail.embed.member", member.getAsMention(), true);
-		if (anon)
-			jailEmbedBuilder.addLocalizedFieldAndValue("customjail.embed.moderator", "customjail.anonymous", true,
-					null);
-		else
-			jailEmbedBuilder.addLocalizedField("customjail.embed.moderator", moderator.getAsMention(), true);
-		jailEmbedBuilder.addLocalizedField("customjail.embed.caseid",
-				caseId.map(id -> "" + id).orElseGet(() -> messages.getMessage("customjail.embed.na", null, locale)),
-				true);
+		Button acceptButton = sb.newLocalizedButton(ButtonStyle.PRIMARY,
+				Utilities.Interactions.wrapInteraction("startjail", member), CommonMessages.ACCEPT);
 
-		// Row 2
-		jailEmbedBuilder.addLocalizedField("customjail.embed.duration",
-				time.getLocalizedDisplayString(messages, locale), true);
+		sb.setThumbnailUrl(member.getEffectiveAvatarUrl());
+		sb.addLocalizedFormattedTextDisplay("## %s\n%s", CommonMessages.MEMBER_JAILED,
+				"Welcome to City 17 " + member.getAsMention() + ".\nPlease hit \"Accept\" to start the timer.");
+		cb.addSectionAndClear(sb);
 
-		// Row 3
-		jailEmbedBuilder.addLocalizedField("customjail.embed.reason",
-				Optional.ofNullable(reason).filter(r -> !r.isBlank())
-						.orElseGet(() -> messages.getMessage("customjail.embed.defaultReason", null, locale)),
-				false);
+		cb.addSmallDividingSeparator();
 
-		jailEmbedBuilder.setTimestamp(Instant.now());
-		jailEmbedBuilder.setLocalizedFooter("customjail.footer");
+		String detailsFormat = """
+				**%s:** %s
+				**%s:** %s
+				**%s:** %s
+				**%s:** %s
+				""";
+		cb.addLocalizedFormattedTextDisplay(detailsFormat,
+				// Member
+				CommonMessages.MEMBER, member.getAsMention(),
+				// Moderator
+				CommonMessages.MODERATOR, anon ? CommonMessages.ANONYMOUS : moderator.getAsMention(),
+				// Case-ID
+				CommonMessages.CASE_ID, caseId.isPresent() ? caseId.get() : CommonMessages.NA,
+				// Duration
+				CommonMessages.DURATION, time.getLocalizedDisplayString(messages(), locale));
+		cb.addSmallDividingSeparator();
 
-		return jailEmbedBuilder.build();
+		cb.addLocalizedFormattedTextDisplay("**%s**\n%s", CommonMessages.REASON,
+				StringUtils.nullIfBlank(reason) == null ? CommonMessages.DEFAULT_REASON : reason);
+
+		cb.addSmallDividingSeparator();
+
+		cb.addActionRow(ActionRow.of(acceptButton));
+
+		return cb.build();
 	}
 
 	// ===========================================================================================================
+
+	@Override
+	public Set<Warning> getWarnings(long guild, long member) {
+		return warningDatabase.findByGuildAndMember(guild, member);
+	}
 
 	@Override
 	public int getTotalWarnings(Member member) {
@@ -381,7 +398,7 @@ public class JailSystemImpl extends ListenerAdapter
 		ifEnabledOrError(warning.getGuild(), config -> {
 			logger.info("Deleting warning {}", warning);
 			warningDatabase.delete(warning);
-			Guild guild = jda.getGuildById(warning.getGuild());
+			Guild guild = watame.getJda().getGuildById(warning.getGuild());
 
 			if (guild == null)
 				throw new IllegalArgumentException(
@@ -408,7 +425,7 @@ public class JailSystemImpl extends ListenerAdapter
 		warning.setReason(newReason);
 		Warning newW = warningDatabase.save(warning);
 
-		Guild guild = jda.getGuildById(warning.getGuild());
+		Guild guild = watame.getJda().getGuildById(warning.getGuild());
 
 		if (guild == null)
 			throw new IllegalArgumentException(
@@ -470,7 +487,7 @@ public class JailSystemImpl extends ListenerAdapter
 			if (moderator.getGuild().getIdLong() != guild)
 				throw new CannotInteractException("customjail.not-from-same-guild");
 
-		Guild _guild = jda.getGuildById(guild);
+		Guild _guild = watame.getJda().getGuildById(guild);
 		if (_guild == null)
 			throw new IllegalArgumentException("Unknown guild");
 
@@ -487,10 +504,10 @@ public class JailSystemImpl extends ListenerAdapter
 				guild.addRoleToMember(member, jailRole).queue();
 			} else
 				onWarningLevelChanged(config, member,
-						messages.getMessage("customjail.reason.fix", null, discordLogger.getEffectiveLocale(guild)));
+						messages().getMessage("customjail.reason.fix", null, messages().getLocaleForGuild(guild)));
 		});
 	}
-	
+
 	@Override
 	public Optional<String> getWarningEndTimestamp(Member member) {
 		return scheduler.getWarningEndTimestamp(member);
@@ -504,11 +521,25 @@ public class JailSystemImpl extends ListenerAdapter
 	}
 
 	@Override
+	public void onGuildBan(GuildBanEvent event) {
+		Guild guild = event.getGuild();
+		User user = event.getUser();
+
+		// Check if banned member is jailed
+		if (isJailed(guild.getIdLong(), user.getIdLong())) {
+			logger.info("Member {} banned {} while jail timer running. Removing timer...", user, guild);
+			scheduler.removeJailTimer(guild.getIdLong(), user.getIdLong());
+		}
+	}
+
+	@Override
 	public void onGuildMemberRemove(GuildMemberRemoveEvent event) {
-		if (scheduler.isWarningTimerRunning(event.getGuild().getIdLong(), event.getUser().getIdLong())) {
-			logger.info("Member {} left {} while warning timer running. Removing timer...", event.getUser(),
-					event.getGuild());
-			scheduler.removeWarningTimer(event.getGuild().getIdLong(), event.getUser().getIdLong());
+		Guild guild = event.getGuild();
+		User user = event.getUser();
+
+		if (scheduler.isWarningTimerRunning(guild.getIdLong(), user.getIdLong())) {
+			logger.info("Member {} left {} while warning timer running. Removing timer...", user, guild);
+			scheduler.removeWarningTimer(guild.getIdLong(), user.getIdLong());
 		}
 	}
 
@@ -518,6 +549,11 @@ public class JailSystemImpl extends ListenerAdapter
 		logger.info("Left guild {}. Removing all timers and warnings");
 		clearWarnings(guild);
 		service.delete(guild);
+		try {
+			scheduler.removeAllTimer(guild);
+		} catch (SchedulerException e) {
+			logger.error("Failed to remove all timers for " + guild, e);
+		}
 	}
 
 	@Override
@@ -539,7 +575,7 @@ public class JailSystemImpl extends ListenerAdapter
 
 					// Check if member is jailed
 					if (!isJailed(member)) {
-						error(event, "customjail.notJailed").queue();
+						error(event, "customjail.notJailed").and(event.editButton(null)).queue();
 						return;
 					}
 
@@ -549,41 +585,70 @@ public class JailSystemImpl extends ListenerAdapter
 						return;
 					}
 
-					Locale locale = event.getUserLocale().toLocale();
-					Button successButton = Button
-							.success("jailAccepted", messages.getMessage("customjail.embed.accepted", null, locale))
-							.asDisabled();
+					// Create replacer for jail container
+					Function<Object, ComponentReplacer> containerReplacer = endTimestamp -> ComponentReplacer.of(
+							// Of container
+							Container.class,
+							// Container with ID 100
+							container -> container.getUniqueId() == 100,
+							// Update container
+							container -> {
+								Locale locale = event.getUserLocale().toLocale();
 
+								// Add time left to new component
+								Container newContainer = ComponentUtils.addComponentsToContainer(container,
+										TextDisplay.ofFormat("-# %s: %s",
+												messages().getMessage(CommonMessages.TIME_LEFT, locale), endTimestamp));
+
+								// Replace accept button with accepted
+								return newContainer.replace(ComponentReplacer.of(Button.class,
+										button -> button.getCustomId().startsWith("startjail"),
+										button -> Button
+												.success("jailAccepted", messages()
+														.getMessage("customjail.embed.accepted", null, locale))
+												.asDisabled()));
+							});
+
+					// If timer is already running, update jail container
 					if (scheduler.isJailTimerRunning(member)) {
-						error(event, "customjail.timerAlreadyStarted").queue();
+						error(event, "customjail.timer-already-started").queue();
 
 						// Set accepted if not already
 						if (event.getButton().getStyle() != ButtonStyle.SUCCESS)
-							event.editButton(successButton).queue();
+							event.getMessage()
+									.editMessageComponents(event.getMessage().getComponentTree()
+											.replace(containerReplacer.apply(getJailEndTimestamp(member).get())))
+									.useComponentsV2().queue();
 						return;
 					}
 
 					// Display working
 					event.deferReply(true).flatMap(hook -> {
-
+						// Attempt to start timer
 						Date date = startJailTimer(member, null, null);
 
-						return hook.editOriginalEmbeds(
-								Response.success(messages.getMessage("customjail.embed.time-remaining",
-										new Object[] { TimeFormat.RELATIVE.atInstant(date.toInstant()) }, locale)))
-								.and(event.editButton(successButton));
+						Locale locale = event.getUserLocale().toLocale();
+						Timestamp endTimestamp = TimeFormat.RELATIVE.atInstant(date.toInstant());
+
+						// Create response embed
+						MessageEmbed successEmbed = Response.success(messages()
+								.getMessage("customjail.embed.time-remaining", new Object[] { endTimestamp }, locale));
+
+						// Update jail container
+						RestAction<?> updateContainer = event.getMessage().editMessageComponents(
+								event.getMessage().getComponentTree().replace(containerReplacer.apply(endTimestamp)))
+								.useComponentsV2();
+						return hook.editOriginalEmbeds(successEmbed).and(updateContainer);
 					}).queue();
 				}
 				}
 			},
 					// Unable to find member button was wrapped to
 					() -> {
-						MessageEmbed errorMsg = Response.error(messages.getMessage("customjail.embed.no-target", null,
-								event.getUserLocale().toLocale()));
-						RestAction<?> edit = (event.isAcknowledged()
-								? event.getHook().editOriginalEmbeds(errorMsg).setReplace(true)
-								: event.replyEmbeds(errorMsg).setEphemeral(true));
-						event.editButton(event.getButton().asDisabled()).flatMap(o -> edit).queue();
+						MessageEmbed errorMsg = Response.error(
+								messages().getMessage("customjail.no-target", null, event.getUserLocale().toLocale()));
+						event.replyEmbeds(errorMsg).setEphemeral(true)
+								.flatMap(v -> event.editButton(event.getButton().asDisabled())).queue();
 					});
 		}))
 			return;
@@ -598,7 +663,7 @@ public class JailSystemImpl extends ListenerAdapter
 						// Case ID
 						"customjail.embed.caseid", "" + event.getWarning().getId(),
 						// Reason
-						"customjail.embed.reason", '*' + event.getReason(messages, locale) + '*'));
+						"customjail.embed.reason", '*' + event.getReason(messages(), locale) + '*'));
 
 	}
 
@@ -610,7 +675,7 @@ public class JailSystemImpl extends ListenerAdapter
 						// Case ID
 						"customjail.embed.caseid", "" + event.getWarning().getId(),
 						// Reason
-						"customjail.embed.reason", '*' + event.getReason(messages, locale) + '*'));
+						"customjail.embed.reason", '*' + event.getReason(messages(), locale) + '*'));
 	}
 
 	@EventListener
@@ -626,7 +691,7 @@ public class JailSystemImpl extends ListenerAdapter
 						// Warning level
 						"customjail.embed.warning-level", event.getOriginalLevel() + " \u2192 " + event.getNewLevel(),
 						// Reason
-						"customjail.embed.reason", '*' + event.getReason(messages, locale) + '*'));
+						"customjail.embed.reason", '*' + event.getReason(messages(), locale) + '*'));
 	}
 
 	@EventListener
@@ -634,9 +699,9 @@ public class JailSystemImpl extends ListenerAdapter
 		defaultEventHandle(event, true,
 				(locale, guild, user) -> notifyMember(locale, guild, user, "customjail.notify.jailed", Colors.ERROR,
 						// Case ID
-						"customjail.embed.caseid", event.getCaseId(messages, locale),
+						"customjail.embed.caseid", event.getCaseId(messages(), locale),
 						// Reason
-						"customjail.embed.reason", '*' + event.getReason(messages, locale) + '*'));
+						"customjail.embed.reason", '*' + event.getReason(messages(), locale) + '*'));
 	}
 
 	@EventListener
@@ -644,7 +709,7 @@ public class JailSystemImpl extends ListenerAdapter
 		defaultEventHandle(event, false,
 				(locale, guild, user) -> notifyMember(locale, guild, user, "customjail.notify.unjailed", Colors.NOTICE,
 						// Reason
-						"customjail.embed.reason", '*' + event.getReason(messages, locale) + '*'));
+						"customjail.embed.reason", '*' + event.getReason(messages(), locale) + '*'));
 	}
 
 	@EventListener
@@ -653,7 +718,7 @@ public class JailSystemImpl extends ListenerAdapter
 				(locale, guild, user) -> notifyMember(locale, guild, user, "customjail.notify.timer-started",
 						Colors.NOTICE,
 						// Reason
-						"customjail.embed.reason", '*' + event.getReason(messages, locale) + '*',
+						"customjail.embed.reason", '*' + event.getReason(messages(), locale) + '*',
 						// Time left
 						"customjail.embed.time-left", TimeFormat.RELATIVE.format(event.getEndDate().getTime())));
 	}
@@ -669,14 +734,17 @@ public class JailSystemImpl extends ListenerAdapter
 		ifEnabled(event.getGuild(), config -> {
 			Guild guild = event.getGuild();
 			Member member = event.getMember();
-			Locale locale = discordLogger.getEffectiveLocale(guild);
+			Locale locale = messages().getLocaleForGuild(guild);
 
 			// Send DM message to user
 			if (notifyMember != null && config.isNotifyMember()
 					&& !(member.getUser().isBot() && member.getUser().isSystem()))
 				notifyMember.accept(locale, guild, member.getUser());
 
-			discordLogger.modlog(guild, config.getLogChannel(), event);
+			if (useComponentV2Logging)
+				watame.getDiscordLogger().modlogV2(guild, config.getLogChannel(), event);
+			else
+				watame.getDiscordLogger().modlog(guild, config.getLogChannel(), event);
 		});
 	}
 
@@ -710,7 +778,7 @@ public class JailSystemImpl extends ListenerAdapter
 				// Send embed if we can talk in the channel
 				.flatMap(PrivateChannel::canTalk, channel -> {
 					// Create embed
-					LocalizedEmbedBuilder builder = new LocalizedEmbedBuilder(messages, locale);
+					LocalizedEmbedBuilder builder = watame.getEmbedBuilder(locale);
 					builder.setColor(color);
 					builder.setLocalizedTitle(title, locale);
 					builder.setThumbnail(guild.getIconUrl());
@@ -722,10 +790,10 @@ public class JailSystemImpl extends ListenerAdapter
 
 					String guildName = MarkdownUtil.maskedLink(guild.getName(),
 							DiscordUtils.getGuildProtocolLink(guild));
-					b.append(field.formatted(messages.getMessage("customjail.notify.in", null, locale), guildName));
+					b.append(field.formatted(messages().getMessage("customjail.notify.in", null, locale), guildName));
 
 					fields.forEach(
-							(key, value) -> b.append(field.formatted(messages.getMessage(key, null, locale), value)));
+							(key, value) -> b.append(field.formatted(messages().getMessage(key, null, locale), value)));
 
 					return channel.sendMessageEmbeds(builder.build());
 				})
@@ -820,7 +888,7 @@ public class JailSystemImpl extends ListenerAdapter
 	// ===========================================================================================================
 
 	private void fireEvent(ApplicationEvent event) {
-		CompletableFuture.runAsync(() -> publisher.publishEvent(event));
+		publisher.publishEvent(event);
 	}
 
 	private void ifEnabled(Guild guild, Consumer<CustomJailConfiguration> config) {
@@ -865,8 +933,8 @@ public class JailSystemImpl extends ListenerAdapter
 				// Modify roles
 				.modifyMemberRoles(member, modifyWarningRoles(config, member, level))
 				// Add reason
-				.reason(reason.orElseGet(() -> messages.getMessage("customjail.embed.defaultReason", null,
-						discordLogger.getEffectiveLocale(member.getGuild()))));
+				.reason(reason.orElseGet(() -> messages().getMessage(CommonMessages.DEFAULT_REASON,
+						messages().getLocaleForGuild(member.getGuild()))));
 	}
 
 	private Set<Role> modifyWarningRoles(CustomJailConfiguration config, Member member, int level) {
@@ -899,9 +967,11 @@ public class JailSystemImpl extends ListenerAdapter
 	}
 
 	private ReplyCallbackAction error(IReplyCallback event, String code, Object... args) {
-		return event
-				.replyEmbeds(Response.error(messages.getMessage(code, args, code, event.getUserLocale().toLocale())))
-				.setEphemeral(true);
+		return event.replyComponents(watame.getResponseV2().errorResolvable(Localized.resolved(code, args),
+				event.getUserLocale().toLocale())).useComponentsV2();
+//		return event
+//				.replyEmbeds(Response.error(messages().getMessage(code, args, code, event.getUserLocale().toLocale())))
+//				.setEphemeral(true);
 	}
 
 	private void kickFromVoiceChat(Member member) {
@@ -915,13 +985,7 @@ public class JailSystemImpl extends ListenerAdapter
 				.ifPresent(vcState -> member.getGuild().kickVoiceMember(member).queue());
 	}
 
-	@Override
-	public void setMessageSource(MessageSource messageSource) {
-		this.messages = messageSource;
-	}
-
-	@Override
-	public void setApplicationEventPublisher(ApplicationEventPublisher applicationEventPublisher) {
-		this.publisher = applicationEventPublisher;
+	private DiscordLocaleMessageSource messages() {
+		return watame.getMessageSource();
 	}
 }

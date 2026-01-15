@@ -6,11 +6,16 @@ import java.util.Optional;
 
 import org.springframework.context.MessageSource;
 
+import net.dv8tion.jda.api.components.separator.Separator.Spacing;
 import net.dv8tion.jda.api.entities.Member;
+import net.foxgenesis.customjail.CommonMessages;
 import net.foxgenesis.customjail.database.warning.Warning;
 import net.foxgenesis.watame.util.discord.Colors;
 import net.foxgenesis.watame.util.discord.DiscordUtils;
+import net.foxgenesis.watame.util.lang.Localized;
+import net.foxgenesis.watame.util.lang.LocalizedContainerBuilder;
 import net.foxgenesis.watame.util.lang.LocalizedEmbedBuilder;
+import net.foxgenesis.watame.util.lang.LocalizedSectionBuilder;
 
 public class WarningUpdatedEvent extends WarningEvent {
 
@@ -33,18 +38,63 @@ public class WarningUpdatedEvent extends WarningEvent {
 	public void fillEmbed(LocalizedEmbedBuilder builder) {
 		MessageSource source = builder.getMessageSource();
 		Locale locale = builder.getLocale();
-		
+
 		// Row 1
 		builder.addLocalizedField("customjail.embed.member", DiscordUtils.mentionUser(oldWarning.getMember()), true);
-		builder.addLocalizedField("customjail.embed.moderator", DiscordUtils.mentionUser(oldWarning.getModerator()), true);
+		builder.addLocalizedField("customjail.embed.moderator", DiscordUtils.mentionUser(oldWarning.getModerator()),
+				true);
 		builder.addLocalizedField("customjail.embed.caseid", getCaseId(source, locale), true);
 
 		// Row 2
-		builder.addLocalizedField("customjail.embed.old-reason", Optional.ofNullable(oldWarning.getReason()).orElseGet(getDefaultReason(source, locale)), true);
+		builder.addLocalizedField("customjail.embed.old-reason",
+				Optional.ofNullable(oldWarning.getReason()).orElseGet(getDefaultReason(source, locale)), true);
 		builder.addLocalizedField("customjail.embed.new-reason", getWarningReason(source, locale), true);
-		
+
 		// Row 3
 		builder.addLocalizedField("customjail.embed.changed-by", getModerator(source, locale), false);
 		builder.addLocalizedField("customjail.embed.reason", getReason(source, locale), true);
+	}
+
+	@Override
+	public void fillContainer(LocalizedContainerBuilder builder) {
+		MessageSource source = builder.getMessageSource();
+		Locale locale = builder.getLocale();
+
+		String detailsFormat = """
+				**%s:** %s
+				**%s:** %s
+				""";
+
+		builder.addDividingSeparator(Spacing.SMALL);
+		builder.addLocalizedFormattedTextDisplay(detailsFormat,
+				// Old reason
+				Localized.resolved("customjail.embed.old-reason"),
+				Optional.ofNullable(oldWarning.getReason()).orElseGet(getDefaultReason(source, locale)),
+				// New reason
+				Localized.resolved("customjail.embed.new-reason"), getWarningReason(source, locale));
+
+		builder.addDividingSeparator(Spacing.SMALL);
+		builder.addLocalizedFormattedTextDisplay("**%s:** %s\n### %s\n%s",
+				Localized.resolved("customjail.embed.changed-by"), getModerator(source, locale),
+				Localized.resolved("customjail.embed.reasoning"), getReason(source, locale));
+	}
+
+	@Override
+	protected void fillContainerDetails(LocalizedSectionBuilder builder) {
+		MessageSource source = builder.getMessageSource();
+		Locale locale = builder.getLocale();
+
+		String detailsFormat = """
+				**%s:** %s
+				**%s:** %s
+				**%s:** %s
+				""";
+		builder.addLocalizedFormattedTextDisplay(detailsFormat,
+				// Member
+				CommonMessages.MEMBER, getMember().getAsMention(),
+				// Moderator
+				CommonMessages.MODERATOR, getModerator(source, locale),
+				// Case-ID
+				CommonMessages.CASE_ID, getCaseId(source, locale));
 	}
 }
